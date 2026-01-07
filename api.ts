@@ -3,7 +3,7 @@ import { loadData as loadCsvData } from './constants';
 
 // This would come from process.env in a real build
 // For local dev/preview, we might default to a placeholder or localhost
-const API_URL = 'https://still-band-0243.uwindsorfacility.workers.dev'; 
+const API_URL = 'https://equiplocate.uwindsorfacility.workers.dev'; 
 
 export const api = {
   // Check if backend is alive
