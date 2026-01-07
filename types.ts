@@ -15,6 +15,7 @@ export interface Equipment {
   PurchaseDate: string;
   WarrantyDate: string;
   images: string[]; // URLs/Base64 strings
+  status: 'Active' | 'Inactive' | 'Under Repair' | 'Obsolete';
 }
 
 export interface MaintenanceRoom {

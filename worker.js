@@ -8,7 +8,7 @@
 // --- CONFIGURATION ---
 // PASTE YOUR R2 PUBLIC URL HERE (No trailing slash)
 // Example: "https://pub-123456789.r2.dev"
-const R2_PUBLIC_URL = "https://pub-24e9a540db684a1e96fb31268ed7c4f2.r2.dev"; 
+const R2_PUBLIC_URL = "https://pub-bdbb540abeaa4d5b95c306bfe90ce8d3.r2.dev"; 
 
 export default {
   async fetch(request, env) {
