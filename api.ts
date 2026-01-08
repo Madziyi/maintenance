@@ -1,8 +1,5 @@
 import { BuildingData, Equipment, MaintenanceRoom, FloorPlan } from './types';
-import { loadData as loadCsvData } from './constants';
 
-// This would come from process.env in a real build
-// For local dev/preview, we might default to a placeholder or localhost
 const API_URL = 'https://equiplocate.uwindsorfacility.workers.dev'; 
 
 export const api = {
@@ -16,28 +13,21 @@ export const api = {
     }
   },
 
-  // Initialize DB with CSV data (One time setup)
-  seedDatabase: async (): Promise<void> => {
-    const data = loadCsvData();
-    const res = await fetch(`${API_URL}/api/seed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) throw new Error('Failed to seed database');
-  },
-
   // Get all data structured as BuildingData[]
   getAllData: async (): Promise<BuildingData[]> => {
-    try {
-      const res = await fetch(`${API_URL}/api/data`);
-      if (!res.ok) throw new Error('Failed to fetch data');
-      return await res.json();
-    } catch (e) {
-      console.warn("API unavailable, falling back to local CSV for preview.");
-      // Fallback for preview mode so app doesn't crash before backend deployment
-      return loadCsvData(); 
+    const res = await fetch(`${API_URL}/api/data`);
+    if (!res.ok) {
+        let errorText = await res.text();
+        console.error("API Error /api/data:", res.status, errorText);
+        try {
+            // If error text is JSON, parse it for better DX
+            const jsonErr = JSON.parse(errorText);
+            if (jsonErr.error) errorText = jsonErr.error;
+        } catch (e) { /* ignore */ }
+        
+        throw new Error(`Failed to fetch data: ${res.status} - ${errorText}`);
     }
+    return await res.json();
   },
 
   // Save specific entities
@@ -47,7 +37,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(eq)
     });
-    if (!res.ok) throw new Error('Failed to save equipment');
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/equipment:", text);
+        throw new Error(`Failed to save equipment: ${text}`);
+    }
     return await res.json();
   },
 
@@ -57,7 +51,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(room)
     });
-    if (!res.ok) throw new Error('Failed to save room');
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/rooms:", text);
+        throw new Error(`Failed to save room: ${text}`);
+    }
     return await res.json();
   },
 
@@ -67,7 +65,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(building)
     });
-    if (!res.ok) throw new Error('Failed to save building');
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/buildings:", text);
+        throw new Error(`Failed to save building: ${text}`);
+    }
   },
 
   saveFloorPlan: async (buildingCode: string, plan: FloorPlan): Promise<void> => {
@@ -76,25 +78,72 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ buildingCode, plan })
     });
-    if (!res.ok) throw new Error('Failed to save floor plan');
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/floorplans:", text);
+        throw new Error(`Failed to save floor plan: ${text}`);
+    }
   },
 
   deleteFloorPlan: async (id: string): Promise<void> => {
-     await fetch(`${API_URL}/api/floorplans/${id}`, { method: 'DELETE' });
+     const res = await fetch(`${API_URL}/api/floorplans/${id}`, { method: 'DELETE' });
+     if (!res.ok) {
+         const text = await res.text();
+         console.error("API Error delete /api/floorplans:", text);
+         throw new Error(`Failed to delete floor plan: ${text}`);
+     }
   },
 
   // Upload to R2 via Worker
-  uploadFile: async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
+  uploadFile: async (file: File, oldImageUrl?: string): Promise<string> => {
+    // Get file extension from filename
+    const fileName = file.name || '';
+    const fileExtension = fileName.match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase() || 
+                         (file.type.includes('jpeg') ? 'jpg' :
+                          file.type.includes('png') ? 'png' :
+                          file.type.includes('gif') ? 'gif' :
+                          file.type.includes('webp') ? 'webp' :
+                          file.type.includes('svg') ? 'svg' : 'jpg');
     
+    const headers: HeadersInit = {};
+    if (oldImageUrl) {
+      headers['X-Old-Image-Url'] = oldImageUrl;
+    }
+    // Send filename and extension as custom headers for the server to use
+    headers['X-File-Name'] = fileName;
+    headers['X-File-Extension'] = fileExtension;
+    headers['Content-Type'] = file.type || 'application/octet-stream';
+    
+    // Send file as raw body (not FormData) so we can control headers better
     const res = await fetch(`${API_URL}/api/upload`, {
       method: 'PUT',
-      body: formData
+      headers: headers,
+      body: file
     });
     
-    if (!res.ok) throw new Error('Upload failed');
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/upload:", text);
+        throw new Error(`Upload failed: ${text}`);
+    }
     const data = await res.json();
     return data.url; // Returns the public R2 URL
+  },
+
+  // Delete image from R2 bucket
+  deleteImage: async (imageUrl: string): Promise<void> => {
+    if (!imageUrl) return;
+    
+    const res = await fetch(`${API_URL}/api/delete-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl })
+    });
+    
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/delete-image:", text);
+        // Don't throw - deletion failure shouldn't block the UI
+    }
   }
 };

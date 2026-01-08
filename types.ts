@@ -27,8 +27,8 @@ export interface MaintenanceRoom {
   floorPlanId?: string; // ID of the linked FloorPlan
   x?: number; // X coordinate % on floor plan
   y?: number; // Y coordinate % on floor plan
-  doorImage?: string; // Base64 string of the door
-  roomImage?: string; // Base64 string of the room interior
+  roomImage?: string; // Room panorama URL
+  Notes?: string; // Room notes
 }
 
 export interface FloorPlan {

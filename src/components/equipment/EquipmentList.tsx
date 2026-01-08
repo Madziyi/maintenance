@@ -1,0 +1,1052 @@
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw } from 'lucide-react';
+import { BuildingData, Equipment } from '../../../types';
+import { api } from '../../../api';
+
+interface EquipmentListProps {
+  data: BuildingData[];
+  searchTerm: string;
+  onSearchChange: (term: string) => void;
+  onSelectEquipment: (equipment: Equipment) => void;
+  onNavigate: (view: string) => void;
+  onSaveEquipment: (equipment: Equipment) => Promise<void>;
+}
+
+export const EquipmentList: React.FC<EquipmentListProps> = ({
+  data,
+  searchTerm,
+  onSearchChange,
+  onSelectEquipment,
+  onNavigate,
+  onSaveEquipment
+}) => {
+  const navigate = useNavigate();
+  const allEquipment = data.flatMap(b => b.equipment);
+  
+  // Add Equipment state
+  const [isAddingEquipment, setIsAddingEquipment] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [newEquipmentName, setNewEquipmentName] = useState('');
+  const [newEquipmentDesc, setNewEquipmentDesc] = useState('');
+  const [newEquipmentLocation, setNewEquipmentLocation] = useState('');
+  const [newEquipmentRoom, setNewEquipmentRoom] = useState('');
+  const [newEquipmentManufacturer, setNewEquipmentManufacturer] = useState('');
+  const [newEquipmentVendor, setNewEquipmentVendor] = useState('');
+  const [newEquipmentSerialNum, setNewEquipmentSerialNum] = useState('');
+  const [newEquipmentNotes, setNewEquipmentNotes] = useState('');
+  const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
+  
+  // Filter state
+  const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const [showRoomFilter, setShowRoomFilter] = useState(false);
+  const [showDescriptionFilter, setShowDescriptionFilter] = useState(false);
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
+  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
+  
+  // Refs for dropdowns
+  const locationDropdownRef = useRef<HTMLDivElement>(null);
+  const roomDropdownRef = useRef<HTMLDivElement>(null);
+  const descriptionDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(event.target as Node)) {
+        setShowLocationFilter(false);
+      }
+      if (roomDropdownRef.current && !roomDropdownRef.current.contains(event.target as Node)) {
+        setShowRoomFilter(false);
+      }
+      if (descriptionDropdownRef.current && !descriptionDropdownRef.current.contains(event.target as Node)) {
+        setShowDescriptionFilter(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Extract unique locations with building names
+  const locationOptions = useMemo(() => {
+    const locations = data
+      .filter(b => b.equipment.length > 0)
+      .map(b => ({
+        code: b.code,
+        name: b.name,
+        count: b.equipment.length
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return locations;
+  }, [data]);
+
+  // Extract rooms (only from selected locations)
+  const roomOptions = useMemo(() => {
+    if (selectedLocations.length === 0) return [];
+    
+    const relevantEquipment = allEquipment.filter(e => 
+      selectedLocations.includes(e.Location)
+    );
+    
+    const rooms = relevantEquipment
+      .map(e => ({
+        room: e.Room?.trim() || '',
+        location: e.Location
+      }))
+      .filter(r => r.room && r.room !== '') // Exclude empty
+      .filter((r, i, arr) => {
+        // Unique by location + room combination
+        return arr.findIndex(item => 
+          item.location === r.location && item.room === r.room
+        ) === i;
+      })
+      .map(r => ({
+        room: r.room,
+        location: r.location,
+        count: relevantEquipment.filter(e => 
+          e.Location === r.location && e.Room?.trim() === r.room
+        ).length
+      }))
+      .sort((a, b) => {
+        // Sort by location first, then room
+        if (a.location !== b.location) {
+          return a.location.localeCompare(b.location);
+        }
+        return a.room.localeCompare(b.room);
+      });
+    
+    return rooms;
+  }, [allEquipment, selectedLocations]);
+
+  // Extract unique descriptions (exact match, preserve casing)
+  const descriptionOptions = useMemo(() => {
+    const descriptions = allEquipment
+      .map(e => e.EquipmentDesc?.trim())
+      .filter(d => d && d !== '') // Exclude empty
+      .filter((d, i, arr) => {
+        // Case-insensitive uniqueness check, but preserve original casing
+        const lower = d.toLowerCase();
+        return arr.findIndex(item => item.toLowerCase() === lower) === i;
+      })
+      .map(desc => ({
+        value: desc,
+        count: allEquipment.filter(e => 
+          e.EquipmentDesc?.trim().toLowerCase() === desc.toLowerCase()
+        ).length
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+    return descriptions;
+  }, [allEquipment]);
+
+  // Filtered equipment
+  const filtered = useMemo(() => {
+    return allEquipment.filter(e => {
+      // Search filter (existing logic)
+      const searchMatch = !searchTerm || 
+        e.Equipment.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        e.EquipmentDesc.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        e.AssetTag.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Location filter
+      const locationMatch = selectedLocations.length === 0 || 
+        selectedLocations.includes(e.Location);
+      
+      // Room filter (must match both location and room)
+      const roomMatch = selectedRooms.length === 0 || 
+        selectedRooms.some(selected => {
+          // Format: "Location|Room" if multiple locations (pipe separator), or just "Room" if single location
+          if (selected.includes('|') && selectedLocations.length > 1) {
+            // Multiple locations: format is "Location|Room" (pipe to avoid conflicts with room names containing dashes)
+            const [loc, room] = selected.split('|', 2);
+            return e.Location === loc && e.Room?.trim() === room;
+          } else {
+            // Single location selected, room format is just room name
+            // Check if equipment is in the selected location and matches the room
+            return selectedLocations.length === 1 && 
+                   selectedLocations.includes(e.Location) && 
+                   e.Room?.trim() === selected;
+          }
+        });
+      
+      // Description filter (exact match, case-insensitive)
+      const descMatch = selectedDescriptions.length === 0 ||
+        selectedDescriptions.some(selected => 
+          e.EquipmentDesc?.trim().toLowerCase() === selected.toLowerCase()
+        );
+      
+      return searchMatch && locationMatch && roomMatch && descMatch;
+    });
+  }, [allEquipment, searchTerm, selectedLocations, selectedRooms, selectedDescriptions]);
+
+  // Toggle functions
+  const toggleLocation = (code: string) => {
+    setSelectedLocations(prev => {
+      if (prev.includes(code)) {
+        const newLocations = prev.filter(l => l !== code);
+        // Clear room selections if location is removed
+        if (newLocations.length === 0) {
+          setSelectedRooms([]);
+        } else {
+          // Remove rooms that are no longer valid
+          setSelectedRooms(prevRooms => 
+            prevRooms.filter(room => {
+              if (room.includes('|')) {
+                // Multiple locations format: "Location|Room"
+                const [loc] = room.split('|', 2);
+                return newLocations.includes(loc);
+              }
+              // Single location format: just room name (only valid if exactly one location remains)
+              return newLocations.length === 1;
+            })
+          );
+        }
+        return newLocations;
+      } else {
+        return [...prev, code];
+      }
+    });
+  };
+
+  const toggleRoom = (roomKey: string) => {
+    setSelectedRooms(prev => 
+      prev.includes(roomKey)
+        ? prev.filter(r => r !== roomKey)
+        : [...prev, roomKey]
+    );
+  };
+
+  const toggleDescription = (desc: string) => {
+    setSelectedDescriptions(prev => 
+      prev.includes(desc)
+        ? prev.filter(d => d !== desc)
+        : [...prev, desc]
+    );
+  };
+
+  const clearFilters = () => {
+    setSelectedLocations([]);
+    setSelectedRooms([]);
+    setSelectedDescriptions([]);
+  };
+
+  const removeLocation = (code: string) => {
+    toggleLocation(code);
+  };
+
+  const removeRoom = (roomKey: string) => {
+    toggleRoom(roomKey);
+  };
+
+  const removeDescription = (desc: string) => {
+    toggleDescription(desc);
+  };
+
+  const hasActiveFilters = selectedLocations.length > 0 || 
+    selectedRooms.length > 0 || 
+    selectedDescriptions.length > 0;
+
+  // Get available rooms for selected building
+  const availableRooms = useMemo(() => {
+    if (!newEquipmentLocation) return [];
+    const building = data.find(b => b.code === newEquipmentLocation);
+    if (!building) return [];
+    return building.maintenanceRooms
+      .map(r => r.RoomNumber)
+      .filter((room, index, arr) => arr.indexOf(room) === index) // Unique
+      .sort();
+  }, [data, newEquipmentLocation]);
+
+  const handleCreate = () => {
+    setIsAddingEquipment(true);
+    // Pre-select first building if available
+    if (data.length > 0 && !newEquipmentLocation) {
+      setNewEquipmentLocation(data[0].code);
+    }
+  };
+
+  // Reset room when building changes
+  useEffect(() => {
+    if (isAddingEquipment) {
+      setNewEquipmentRoom('');
+    }
+  }, [newEquipmentLocation, isAddingEquipment]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const files = Array.from(e.target.files);
+    const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
+    
+    // Mark all as uploading
+    setUploadingImageIds(new Set(tempIds));
+    setIsUploadingImages(true);
+    
+    try {
+      const uploadPromises = files.map(async (file, idx) => {
+        const tempId = tempIds[idx];
+        try {
+          const url = await api.uploadFile(file);
+          // Remove from uploading set
+          setUploadingImageIds(prev => {
+            const next = new Set(prev);
+            next.delete(tempId);
+            return next;
+          });
+          return url;
+        } catch (err) {
+          setUploadingImageIds(prev => {
+            const next = new Set(prev);
+            next.delete(tempId);
+            return next;
+          });
+          throw err;
+        }
+      });
+      
+      const urls = await Promise.all(uploadPromises);
+      setNewEquipmentImages(prev => [...prev, ...urls]);
+    } catch (err) {
+      alert("Failed to upload some images. Please try again.");
+    } finally {
+      setIsUploadingImages(false);
+      setUploadingImageIds(new Set());
+      // Reset file input
+      e.target.value = '';
+    }
+  };
+
+  const handlePhotoDelete = async (imageUrl: string) => {
+    try {
+      await api.deleteImage(imageUrl);
+      setNewEquipmentImages(prev => prev.filter(img => img !== imageUrl));
+    } catch (err) {
+      alert("Failed to delete image.");
+    }
+  };
+
+  const handleSaveNewEquipment = async () => {
+    if (!newEquipmentName.trim()) {
+      alert("Equipment name is required");
+      return;
+    }
+    if (!newEquipmentLocation) {
+      alert("Please select a location");
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const selectedBuilding = data.find(b => b.code === newEquipmentLocation);
+      const newEq: Equipment = {
+        id: `EQ-NEW-${Date.now()}`,
+        Equipment: newEquipmentName.trim(),
+        EquipmentDesc: newEquipmentDesc.trim(),
+        Notes: newEquipmentNotes.trim(),
+        Location: newEquipmentLocation,
+        LocationDesc: selectedBuilding?.name || '',
+        Room: newEquipmentRoom || '',
+        KeyAccess: '',
+        AssetTag: '',
+        SerialNum: newEquipmentSerialNum.trim(),
+        Manufacturer: newEquipmentManufacturer.trim(),
+        Model: '',
+        Vendor: newEquipmentVendor.trim(),
+        PurchaseDate: '',
+        WarrantyDate: '',
+        images: newEquipmentImages,
+        status: 'Active'
+      };
+      
+      // Save the equipment
+      await onSaveEquipment(newEq);
+      
+      // Navigate to the detail page
+      onSelectEquipment(newEq);
+      navigate(`/equipment/${newEq.id}`);
+      
+      // Reset form
+      setIsAddingEquipment(false);
+      setNewEquipmentName('');
+      setNewEquipmentDesc('');
+      setNewEquipmentLocation('');
+      setNewEquipmentRoom('');
+      setNewEquipmentManufacturer('');
+      setNewEquipmentVendor('');
+      setNewEquipmentSerialNum('');
+      setNewEquipmentNotes('');
+      setNewEquipmentImages([]);
+      setUploadingImageIds(new Set());
+    } catch (error) {
+      alert("Failed to create equipment. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelAddEquipment = async () => {
+    // Delete any uploaded images that weren't saved
+    if (newEquipmentImages.length > 0) {
+      try {
+        await Promise.all(newEquipmentImages.map(url => api.deleteImage(url)));
+      } catch (err) {
+        console.error("Failed to delete some images:", err);
+      }
+    }
+    
+    setIsAddingEquipment(false);
+    setNewEquipmentName('');
+    setNewEquipmentDesc('');
+    setNewEquipmentLocation('');
+    setNewEquipmentRoom('');
+    setNewEquipmentManufacturer('');
+    setNewEquipmentVendor('');
+    setNewEquipmentSerialNum('');
+    setNewEquipmentNotes('');
+    setNewEquipmentImages([]);
+    setUploadingImageIds(new Set());
+  };
+
+  const handleExport = () => {
+    const headers = [
+      "Equipment", "EquipmentDesc", "Notes", "Location", "LocationDesc", "Room", 
+      "Key For Access", "CreationDate", "AssetTag", "SerialNum", "PurchaseDate", 
+      "FailureClass", "Hazardous", "Instructions", "ItemNum", "Manufacturer", 
+      "PurchaseDate", "PurchasePrice", "Vendor", "WarrantyDate"
+    ];
+    const csvContent = allEquipment.map(e => {
+      return [
+        e.Equipment, e.EquipmentDesc, e.Notes, e.Location, e.LocationDesc, e.Room, e.KeyAccess,
+        "", e.AssetTag, e.SerialNum, e.PurchaseDate, "", "", "", "", e.Manufacturer,
+        e.PurchaseDate, "", e.Vendor, e.WarrantyDate
+      ].map(field => `"${(field || '').toString().replace(/"/g, '""')}"`).join(',');
+    });
+    const csvString = [headers.join(','), ...csvContent].join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `equipment_export_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="animate-fade-in space-y-6 pb-20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Equipment Directory</h1>
+          <p className="text-slate-500 text-sm">{filtered.length} assets found</p>
+        </div>
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full md:w-auto">
+          <div className="relative flex-grow md:w-64">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Search equipment..." 
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-slate-200 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+          </div>
+          <div className="flex space-x-2">
+            <button onClick={handleExport} className="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-slate-50 whitespace-nowrap shadow-sm">
+              <Download size={18} className="mr-2" /> Export
+            </button>
+            <button onClick={handleCreate} className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm">
+              <Plus size={18} className="mr-2" /> Add
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Section with Dropdowns */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <span className="text-sm font-medium text-slate-700">Filters:</span>
+          
+          {/* Location Filter Dropdown */}
+          <div className="relative" ref={locationDropdownRef}>
+            <button
+              onClick={() => {
+                setShowLocationFilter(!showLocationFilter);
+                setShowRoomFilter(false);
+                setShowDescriptionFilter(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                selectedLocations.length > 0
+                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Building size={14} />
+              Location
+              {selectedLocations.length > 0 && (
+                <span className="bg-brand-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                  {selectedLocations.length}
+                </span>
+              )}
+              <ChevronDown size={14} className={showLocationFilter ? 'transform rotate-180' : ''} />
+            </button>
+            
+            {showLocationFilter && (
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                <div className="p-3">
+                  <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                    Select Locations ({locationOptions.length})
+                  </div>
+                  <div className="space-y-1.5">
+                    {locationOptions.length > 0 ? (
+                      locationOptions.map(loc => (
+                        <label
+                          key={loc.code}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedLocations.includes(loc.code)}
+                            onChange={() => toggleLocation(loc.code)}
+                            className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                          />
+                          <span className="text-sm text-slate-700 flex-1">
+                            {loc.name} ({loc.code})
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            ({loc.count})
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No location data available</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Room Filter Dropdown - Only show when locations are selected */}
+          {selectedLocations.length > 0 && (
+            <div className="relative" ref={roomDropdownRef}>
+              <button
+                onClick={() => {
+                  setShowRoomFilter(!showRoomFilter);
+                  setShowLocationFilter(false);
+                  setShowDescriptionFilter(false);
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                  selectedRooms.length > 0
+                    ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <MapPin size={14} />
+                Room
+                {selectedRooms.length > 0 && (
+                  <span className="bg-brand-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                    {selectedRooms.length}
+                  </span>
+                )}
+                <ChevronDown size={14} className={showRoomFilter ? 'transform rotate-180' : ''} />
+              </button>
+              
+              {showRoomFilter && (
+                <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                  <div className="p-3">
+                    <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                      Select Rooms ({roomOptions.length})
+                    </div>
+                    <div className="space-y-1.5">
+                      {roomOptions.length > 0 ? (
+                        roomOptions.map(room => {
+                          const roomKey = selectedLocations.length > 1 
+                            ? `${room.location}|${room.room}`
+                            : room.room;
+                          
+                          return (
+                            <label
+                              key={`${room.location}-${room.room}`}
+                              className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedRooms.includes(roomKey)}
+                                onChange={() => toggleRoom(roomKey)}
+                                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                              />
+                              <span className="text-sm text-slate-700 flex-1">
+                                {selectedLocations.length > 1 
+                                  ? `${room.location}-${room.room}`
+                                  : room.room
+                                }
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                ({room.count})
+                              </span>
+                            </label>
+                          );
+                        })
+                      ) : (
+                        <p className="text-xs text-slate-400 italic">No room data available for selected locations</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Description Filter Dropdown */}
+          <div className="relative" ref={descriptionDropdownRef}>
+            <button
+              onClick={() => {
+                setShowDescriptionFilter(!showDescriptionFilter);
+                setShowLocationFilter(false);
+                setShowRoomFilter(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                selectedDescriptions.length > 0
+                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <FileText size={14} />
+              Description
+              {selectedDescriptions.length > 0 && (
+                <span className="bg-brand-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                  {selectedDescriptions.length}
+                </span>
+              )}
+              <ChevronDown size={14} className={showDescriptionFilter ? 'transform rotate-180' : ''} />
+            </button>
+            
+            {showDescriptionFilter && (
+              <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                <div className="p-3">
+                  <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                    Select Descriptions ({descriptionOptions.length})
+                  </div>
+                  <div className="space-y-1.5">
+                    {descriptionOptions.length > 0 ? (
+                      descriptionOptions.map(desc => (
+                        <label
+                          key={desc.value}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedDescriptions.includes(desc.value)}
+                            onChange={() => toggleDescription(desc.value)}
+                            className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                          />
+                          <span className="text-sm text-slate-700 flex-1 line-clamp-1" title={desc.value}>
+                            {desc.value}
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            ({desc.count})
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No description data available</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Active Filter Chips */}
+          {hasActiveFilters && (
+            <>
+              {selectedLocations.map(code => {
+                const loc = locationOptions.find(l => l.code === code);
+                return (
+                  <div
+                    key={code}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm"
+                  >
+                    <Building size={12} />
+                    <span>{loc?.name || code}</span>
+                    <button
+                      onClick={() => removeLocation(code)}
+                      className="hover:bg-brand-200 rounded p-0.5 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+              
+              {selectedRooms.map(roomKey => {
+                const room = roomOptions.find(r => {
+                  const key = selectedLocations.length > 1 
+                    ? `${r.location}|${r.room}`
+                    : r.room;
+                  return key === roomKey;
+                });
+                const displayName = room 
+                  ? (selectedLocations.length > 1 ? `${room.location}-${room.room}` : room.room)
+                  : roomKey;
+                return (
+                  <div
+                    key={roomKey}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm"
+                  >
+                    <MapPin size={12} />
+                    <span>{displayName}</span>
+                    <button
+                      onClick={() => removeRoom(roomKey)}
+                      className="hover:bg-brand-200 rounded p-0.5 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+              
+              {selectedDescriptions.map(desc => (
+                <div
+                  key={desc}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm max-w-xs"
+                >
+                  <FileText size={12} />
+                  <span className="truncate" title={desc}>{desc}</span>
+                  <button
+                    onClick={() => removeDescription(desc)}
+                    className="hover:bg-brand-200 rounded p-0.5 transition-colors flex-shrink-0"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              
+              <button
+                onClick={clearFilters}
+                className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors px-2 py-1"
+              >
+                <X size={12} />
+                Clear all
+              </button>
+            </>
+          )}
+        </div>
+        
+        <div className="text-sm text-slate-500 pt-2 border-t border-slate-200">
+          Showing {filtered.length} of {allEquipment.length} equipment
+        </div>
+      </div>
+
+      {/* Equipment List Table - Part of page scroll */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+              <tr className="text-xs font-bold uppercase text-slate-500 tracking-wider">
+                <th className="py-3 pl-6">ID</th>
+                <th className="py-3">Description</th>
+                <th className="py-3">Building</th>
+                <th className="py-3 pr-6">Room</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.length > 0 ? (
+                filtered.map((e) => (
+                  <tr 
+                    key={e.id} 
+                    onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
+                    className="hover:bg-slate-50 group transition-colors cursor-pointer"
+                  >
+                    <td className="py-3 pl-6 font-mono text-sm font-medium text-brand-700">{e.Equipment}</td>
+                    <td className="py-3 text-sm text-slate-600 max-w-xs lg:max-w-md truncate">{e.EquipmentDesc || "N/A"}</td>
+                    <td className="py-3 text-sm text-slate-600">{e.Location}</td>
+                    <td className="py-3 text-sm text-slate-600 pr-6">{e.Room || "-"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="py-12 text-center text-slate-400">
+                    {hasActiveFilters || searchTerm 
+                      ? "No equipment matches the selected filters"
+                      : "No equipment found"
+                    }
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {filtered.length > 0 ? (
+            filtered.map((e) => (
+              <div 
+                key={e.id} 
+                onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
+                className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="font-mono text-sm font-medium text-brand-700">{e.Equipment}</div>
+                  <div className="text-xs text-slate-400 font-medium">{e.Location}</div>
+                </div>
+                <div className="text-sm text-slate-600 mb-2 line-clamp-2">
+                  {e.EquipmentDesc || "N/A"}
+                </div>
+                {e.Room && (
+                  <div className="text-xs text-slate-500">
+                    <span className="font-medium">Room:</span> {e.Room}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="p-12 text-center text-slate-400">
+              {hasActiveFilters || searchTerm 
+                ? "No equipment matches the selected filters"
+                : "No equipment found"
+              }
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add Equipment Modal */}
+      {isAddingEquipment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 animate-fade-in my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-slate-800">Add New Equipment</h2>
+              <button 
+                onClick={handleCancelAddEquipment}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Equipment Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newEquipmentName}
+                  onChange={(e) => setNewEquipmentName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  placeholder="e.g. HVAC Unit, Generator"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newEquipmentLocation && newEquipmentName.trim()) {
+                      handleSaveNewEquipment();
+                    }
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={newEquipmentDesc}
+                  onChange={(e) => setNewEquipmentDesc(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  placeholder="Brief description of the equipment"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newEquipmentLocation && newEquipmentName.trim()) {
+                      handleSaveNewEquipment();
+                    }
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Building <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newEquipmentLocation}
+                  onChange={(e) => setNewEquipmentLocation(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  required
+                >
+                  <option value="">Select a building...</option>
+                  {data.map(building => (
+                    <option key={building.code} value={building.code}>
+                      {building.name} ({building.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Room
+                </label>
+                <select
+                  value={newEquipmentRoom}
+                  onChange={(e) => setNewEquipmentRoom(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  disabled={!newEquipmentLocation}
+                >
+                  <option value="">Select a room (optional)</option>
+                  {availableRooms.map(room => (
+                    <option key={room} value={room}>{room}</option>
+                  ))}
+                </select>
+                {!newEquipmentLocation && (
+                  <p className="text-xs text-slate-400 mt-1">Please select a building first</p>
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Manufacturer
+                </label>
+                <input
+                  type="text"
+                  value={newEquipmentManufacturer}
+                  onChange={(e) => setNewEquipmentManufacturer(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  placeholder="e.g. Carrier, Trane"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Vendor
+                </label>
+                <input
+                  type="text"
+                  value={newEquipmentVendor}
+                  onChange={(e) => setNewEquipmentVendor(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  placeholder="Vendor name"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Serial Number
+                </label>
+                <input
+                  type="text"
+                  value={newEquipmentSerialNum}
+                  onChange={(e) => setNewEquipmentSerialNum(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  placeholder="Serial number"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  value={newEquipmentNotes}
+                  onChange={(e) => setNewEquipmentNotes(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none resize-y min-h-[80px]"
+                  placeholder="Additional notes about this equipment..."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-2">
+                  Photos
+                </label>
+                
+                {/* Photo Grid */}
+                {newEquipmentImages.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {newEquipmentImages.map((img, idx) => (
+                      <div key={idx} className="relative rounded-lg overflow-hidden aspect-square border border-slate-200 group">
+                        <img src={img} className="w-full h-full object-cover" alt={`Upload ${idx + 1}`} />
+                        <button
+                          onClick={() => handlePhotoDelete(img)}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Uploading Placeholders */}
+                {uploadingImageIds.size > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {Array.from(uploadingImageIds).map((tempId) => (
+                      <div key={tempId} className="relative rounded-lg overflow-hidden aspect-square border-2 border-dashed border-brand-300 bg-brand-50 flex items-center justify-center">
+                        <div className="w-full h-full flex flex-col items-center justify-center p-2">
+                          <RefreshCw className="animate-spin text-brand-600 mb-2" size={20} />
+                          <div className="w-full px-2">
+                            <div className="w-full bg-brand-200 rounded-full h-1.5">
+                              <div className="bg-brand-600 h-1.5 rounded-full animate-pulse" style={{ width: '100%' }}></div>
+                            </div>
+                          </div>
+                          <span className="text-xs text-brand-600 mt-1">Uploading...</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Upload Button */}
+                <label className={`border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {isUploadingImages ? (
+                    <>
+                      <RefreshCw className="animate-spin text-slate-400" size={24} />
+                      <span className="text-sm text-slate-500 mt-2">Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera size={24} className="text-slate-400" />
+                      <span className="text-sm text-slate-500 mt-2">
+                        {newEquipmentImages.length > 0 
+                          ? `Add More Photos (${newEquipmentImages.length} selected)`
+                          : 'Add Photos (Multiple selection allowed)'
+                        }
+                      </span>
+                    </>
+                  )}
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    accept="image/*" 
+                    multiple
+                    onChange={handlePhotoUpload}
+                    disabled={isUploadingImages}
+                  />
+                </label>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={handleCancelAddEquipment}
+                disabled={isSaving}
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveNewEquipment}
+                disabled={isSaving || !newEquipmentName.trim() || !newEquipmentLocation}
+                className="px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Creating...' : 'Create Equipment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+

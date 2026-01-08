@@ -1,21 +1,12 @@
 name = "equiplocate"
 main = "worker.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2024-03-20"
 
-# D1 Database Binding
-# Matches `env.DB` in worker.js
 [[d1_databases]]
 binding = "DB"
 database_name = "equiplocate-db"
 database_id = "c3d7e259-decc-4d2e-9349-dab1d3ee3343"
 
-# R2 Bucket Binding
-# Matches `env.BUCKET` in worker.js
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "equiplocate-media"
-
-# Optional: If you want to configure the R2 Public URL via environment variables 
-# instead of hardcoding it in worker.js
-# [vars]
-# R2_PUBLIC_URL = "https://your-r2-public-url.com"
+bucket_name = "equiplocate-media" # REPLACE THIS with your actual R2 bucket name
