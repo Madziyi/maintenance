@@ -217,9 +217,9 @@ export default {
               const googleMapsLink = (b.googleMapsLink !== undefined && b.googleMapsLink !== null) ? String(b.googleMapsLink) : 
                                     (b.Google_Maps_Link !== undefined && b.Google_Maps_Link !== null) ? String(b.Google_Maps_Link) : '';
               
-              await env.DB.prepare(`
-                INSERT INTO Buildings (Location, Building, Exterior_Image_URL, Google_Maps_Link)
-                VALUES (?, ?, ?, ?)
+          await env.DB.prepare(`
+            INSERT INTO Buildings (Location, Building, Exterior_Image_URL, Google_Maps_Link)
+            VALUES (?, ?, ?, ?)
               `).bind(code, name, buildingImage, googleMapsLink).run();
           }
           
@@ -319,10 +319,10 @@ export default {
           const isNew = !plan.id || isNaN(Number(plan.id));
           
           if (isNew) {
-              await env.DB.prepare(`
-                INSERT INTO FloorPlans (Location, Floor, Image_URL)
-                VALUES (?, ?, ?)
-              `).bind(buildingCode, plan.name, plan.imageUrl).run();
+          await env.DB.prepare(`
+            INSERT INTO FloorPlans (Location, Floor, Image_URL)
+            VALUES (?, ?, ?)
+          `).bind(buildingCode, plan.name, plan.imageUrl).run();
           } else {
               // Get old image URL before updating
               const oldPlan = await env.DB.prepare('SELECT Image_URL FROM FloorPlans WHERE id = ?').bind(plan.id).first();
