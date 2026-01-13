@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info } from 'lucide-react';
 import { BuildingData, Equipment } from '../../../types';
 import { api } from '../../../api';
-import { useToast } from '../../common/Toast';
+import { useToast } from '@/src/components/common/Toast';
 
 interface EquipmentListProps {
   data: BuildingData[];

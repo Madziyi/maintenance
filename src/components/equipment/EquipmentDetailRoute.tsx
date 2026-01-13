@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { BuildingData, Equipment } from '../../types';
+import { BuildingData, Equipment } from '@/types';
 import { EquipmentDetail } from './EquipmentDetail';
 
 interface EquipmentDetailRouteProps {
