@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { BuildingData, Equipment, ViewState } from '../../../types';
 import { api } from '../../../api';
-import { useToast } from '../../common/Toast';
+import { useToast } from '@/src/components/common/Toast';
 
 interface EquipmentDetailProps {
   equipment: Equipment | null;
