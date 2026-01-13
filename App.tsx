@@ -367,7 +367,7 @@ const App = () => {
               <LogOut size={16} />
               <span>Logout</span>
             </button>
-            <p className="text-brand-200 text-xs text-center">&copy; 2024 WayFinder v2.0</p>
+            <p className="text-brand-200 text-xs text-center">&copy; 2026 WayFinder v1.0</p>
         </div>
       </aside>
 

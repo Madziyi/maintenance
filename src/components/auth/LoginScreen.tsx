@@ -99,7 +99,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, staticUsernam
         </form>
 
         <div className="mt-6 text-center text-xs text-slate-500">
-          <p>&copy; 2024 WayFinder v2.0</p>
+          <p>&copy; 2026 WayFinder v1.0</p>
         </div>
       </div>
     </div>
