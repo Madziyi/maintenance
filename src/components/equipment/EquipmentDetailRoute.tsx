@@ -8,13 +8,15 @@ interface EquipmentDetailRouteProps {
   onSave: (eq: Equipment) => Promise<void>;
   onFindRoom: (eq: Equipment) => void;
   onSetFullScreenImage: (url: string | null) => void;
+  onDelete: (equipmentId: string) => Promise<void>;
 }
 
 export const EquipmentDetailRoute: React.FC<EquipmentDetailRouteProps> = ({
   data,
   onSave,
   onFindRoom,
-  onSetFullScreenImage
+  onSetFullScreenImage,
+  onDelete
 }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -40,6 +42,7 @@ export const EquipmentDetailRoute: React.FC<EquipmentDetailRouteProps> = ({
           onSave={onSave}
           onFindRoom={onFindRoom}
           onSetFullScreenImage={onSetFullScreenImage}
+          onDelete={() => onDelete(selectedEquipment.id)}
       />
   );
 };

@@ -1,23 +1,24 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Building, Layers, FileText, X, Plus } from 'lucide-react';
+import { Search, ChevronDown, Building, Layers, FileText, X, Plus, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BuildingData, MaintenanceRoom } from '@/types';
+import { useToast } from '../common/Toast';
 
 interface RoomListProps {
   data: BuildingData[];
-  searchTerm: string;
-  onSearchChange: (term: string) => void;
   onSaveRoom: (room: MaintenanceRoom, buildingCode: string) => Promise<MaintenanceRoom | null>;
 }
 
 export const RoomList: React.FC<RoomListProps> = ({
   data,
-  searchTerm,
-  onSearchChange,
   onSaveRoom
 }) => {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const allRooms = data.flatMap(b => b.maintenanceRooms);
+  
+  // Local search state (avoids re-rendering entire App on each keystroke)
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Add Room state
   const [isAddingRoom, setIsAddingRoom] = useState(false);
@@ -168,6 +169,18 @@ export const RoomList: React.FC<RoomListProps> = ({
     });
   }, [allRooms, searchTerm, selectedLocations, selectedFloors, selectedDescriptions]);
 
+  // Pagination - limit displayed items for performance
+  const ITEMS_PER_PAGE = 50;
+  const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
+  
+  // Reset display limit when filters change
+  useEffect(() => {
+    setDisplayLimit(ITEMS_PER_PAGE);
+  }, [searchTerm, selectedLocations, selectedFloors, selectedDescriptions]);
+  
+  const displayedItems = useMemo(() => filtered.slice(0, displayLimit), [filtered, displayLimit]);
+  const hasMoreItems = filtered.length > displayLimit;
+
   // Toggle functions
   const toggleLocation = (code: string) => {
     setSelectedLocations(prev => {
@@ -241,6 +254,31 @@ export const RoomList: React.FC<RoomListProps> = ({
     return building?.name || code;
   };
 
+  // Export rooms to CSV
+  const handleExport = () => {
+    const headers = [
+      "Building Code", "Building Name", "Room Number", "Floor", "Description", "Notes"
+    ];
+    const csvContent = allRooms.map(room => {
+      return [
+        room.Building,
+        getBuildingName(room.Building),
+        room.RoomNumber,
+        room.Floor || "",
+        room.Description || "",
+        room.Notes || ""
+      ].map(field => `"${(field || '').toString().replace(/"/g, '""')}"`).join(',');
+    });
+    const csvString = [headers.join(','), ...csvContent].join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rooms_export_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Add Room handlers
   const handleCreateRoom = () => {
     setIsAddingRoom(true);
@@ -252,11 +290,11 @@ export const RoomList: React.FC<RoomListProps> = ({
 
   const handleSaveNewRoom = async () => {
     if (!newRoomNumber.trim()) {
-      alert("Room number is required");
+      showToast("Room number is required", 'warning');
       return;
     }
     if (!newRoomBuilding) {
-      alert("Please select a building");
+      showToast("Please select a building", 'warning');
       return;
     }
     
@@ -281,9 +319,10 @@ export const RoomList: React.FC<RoomListProps> = ({
         setNewRoomFloor('');
         setNewRoomDescription('');
         navigate(`/building/${newRoomBuilding}/room/${savedRoom.id}`);
+        showToast("Room created successfully", 'success');
       }
     } catch (error) {
-      alert("Failed to create room. Please try again.");
+      showToast("Failed to create room. Please try again.", 'error');
     } finally {
       setIsSaving(false);
     }
@@ -312,15 +351,23 @@ export const RoomList: React.FC<RoomListProps> = ({
               placeholder="Search rooms..." 
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-slate-200 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
               value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button 
-            onClick={handleCreateRoom} 
-            className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm"
-          >
-            <Plus size={18} className="mr-2" /> Add Room
-          </button>
+          <div className="flex space-x-2">
+            <button 
+              onClick={handleExport} 
+              className="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-slate-50 whitespace-nowrap shadow-sm"
+            >
+              <Download size={18} className="mr-2" /> Export
+            </button>
+            <button 
+              onClick={handleCreateRoom} 
+              className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm"
+            >
+              <Plus size={18} className="mr-2" /> Add Room
+            </button>
+          </div>
         </div>
       </div>
 
@@ -725,8 +772,8 @@ export const RoomList: React.FC<RoomListProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.length > 0 ? (
-                filtered.map((room) => (
+              {displayedItems.length > 0 ? (
+                displayedItems.map((room) => (
                   <tr 
                     key={room.id} 
                     onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
@@ -754,8 +801,8 @@ export const RoomList: React.FC<RoomListProps> = ({
 
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-slate-100">
-          {filtered.length > 0 ? (
-            filtered.map((room) => (
+          {displayedItems.length > 0 ? (
+            displayedItems.map((room) => (
               <div 
                 key={room.id} 
                 onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
@@ -783,6 +830,24 @@ export const RoomList: React.FC<RoomListProps> = ({
               }
             </div>
           )}
+        </div>
+        
+        {/* Show More / Pagination */}
+        {hasMoreItems && (
+          <div className="p-4 border-t border-slate-100 text-center">
+            <button
+              onClick={() => setDisplayLimit(prev => prev + ITEMS_PER_PAGE)}
+              className="px-6 py-2 bg-brand-100 text-brand-700 rounded-lg font-medium hover:bg-brand-200 transition-colors"
+            >
+              Show more ({filtered.length - displayLimit} remaining)
+            </button>
+          </div>
+        )}
+        
+        {/* Item count summary */}
+        <div className="p-3 bg-slate-50 border-t border-slate-100 text-center text-sm text-slate-500">
+          Showing {displayedItems.length} of {filtered.length} items
+          {filtered.length !== allRooms.length && ` (${allRooms.length} total)`}
         </div>
       </div>
     </div>

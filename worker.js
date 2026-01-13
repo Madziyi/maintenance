@@ -106,6 +106,26 @@ export default {
                     buildingMap[r.Location].floorPlans.find(fp => fp.id === String(r.floorplanid)) : 
                     null;
 
+                // Parse room images from JSON (backward compatible with single URL)
+                let imagesArray = [];
+                if (r.Room_Panorama_URL) {
+                    const parsed = safeJSONParse(r.Room_Panorama_URL, null);
+                    if (Array.isArray(parsed)) {
+                        imagesArray = parsed;
+                    } else if (typeof r.Room_Panorama_URL === 'string' && r.Room_Panorama_URL.trim().startsWith('[')) {
+                        // Try to parse as JSON array
+                        try {
+                            const jsonParsed = JSON.parse(r.Room_Panorama_URL);
+                            imagesArray = Array.isArray(jsonParsed) ? jsonParsed : [r.Room_Panorama_URL];
+                        } catch {
+                            imagesArray = [r.Room_Panorama_URL];
+                        }
+                    } else {
+                        // Single URL string (backward compatibility)
+                        imagesArray = [r.Room_Panorama_URL];
+                    }
+                }
+
                 buildingMap[r.Location].maintenanceRooms.push({
                     id: String(r.id),
                     Building: r.Location,
@@ -115,7 +135,7 @@ export default {
                     floorPlanId: linkedFP ? linkedFP.id : undefined,
                     x: r.X_Coordinate,
                     y: r.Y_Coordinate,
-                    roomImage: r.Room_Panorama_URL,
+                    roomImages: imagesArray,
                     Notes: r.Notes || ''
                 });
             }
@@ -151,7 +171,8 @@ export default {
                     Vendor: e.Vendor || '',
                     PurchaseDate: '',
                     WarrantyDate: '',
-                    images: Array.isArray(images) ? images : []
+                    images: Array.isArray(images) ? images : [],
+                    status: e.Status || 'UNKNOWN'
                 });
             }
         }
@@ -217,9 +238,9 @@ export default {
               const googleMapsLink = (b.googleMapsLink !== undefined && b.googleMapsLink !== null) ? String(b.googleMapsLink) : 
                                     (b.Google_Maps_Link !== undefined && b.Google_Maps_Link !== null) ? String(b.Google_Maps_Link) : '';
               
-          await env.DB.prepare(`
-            INSERT INTO Buildings (Location, Building, Exterior_Image_URL, Google_Maps_Link)
-            VALUES (?, ?, ?, ?)
+              await env.DB.prepare(`
+                INSERT INTO Buildings (Location, Building, Exterior_Image_URL, Google_Maps_Link)
+                VALUES (?, ?, ?, ?)
               `).bind(code, name, buildingImage, googleMapsLink).run();
           }
           
@@ -236,15 +257,15 @@ export default {
           let result;
           if (isNew) {
               result = await env.DB.prepare(`
-                INSERT INTO Equipment (Name, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
-              `).bind(e.Equipment, e.EquipmentDesc, e.Location, e.Room, e.Notes, e.SerialNum, e.Manufacturer, e.Vendor, imagesJson).first();
+                INSERT INTO Equipment (Name, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+              `).bind(e.Equipment, e.EquipmentDesc, e.Location, e.Room, e.Notes, e.SerialNum, e.Manufacturer, e.Vendor, imagesJson, e.status || 'UNKNOWN').first();
           } else {
               result = await env.DB.prepare(`
                 UPDATE Equipment SET 
-                Name=?, Description=?, Location=?, Room_Raw=?, Notes=?, Serial_Num=?, Manufacturer=?, Vendor=?, Images=?
+                Name=?, Description=?, Location=?, Room_Raw=?, Notes=?, Serial_Num=?, Manufacturer=?, Vendor=?, Images=?, Status=?
                 WHERE id=? RETURNING *
-              `).bind(e.Equipment, e.EquipmentDesc, e.Location, e.Room, e.Notes, e.SerialNum, e.Manufacturer, e.Vendor, imagesJson, e.id).first();
+              `).bind(e.Equipment, e.EquipmentDesc, e.Location, e.Room, e.Notes, e.SerialNum, e.Manufacturer, e.Vendor, imagesJson, e.status || 'UNKNOWN', e.id).first();
           }
           
           if (!result) throw new Error("Failed to save equipment: DB returned no result.");
@@ -267,6 +288,10 @@ export default {
               floorPlanId = String(r.floorPlanId);
           }
 
+          // Handle roomImages as JSON array (backward compatible with roomImage)
+          const roomImages = r.roomImages || (r.roomImage ? [r.roomImage] : []);
+          const roomImagesJson = JSON.stringify(roomImages);
+
           let result;
           if (isNew) {
                result = await env.DB.prepare(`
@@ -279,7 +304,7 @@ export default {
                    r.Description || null, 
                    (r.x !== undefined && r.x !== null) ? Number(r.x) : 0, 
                    (r.y !== undefined && r.y !== null) ? Number(r.y) : 0, 
-                   r.roomImage || null, 
+                   roomImagesJson, 
                    floorPlanId,
                    r.Notes || null
                ).first();
@@ -295,7 +320,7 @@ export default {
                    r.Description || null, 
                    (r.x !== undefined && r.x !== null) ? Number(r.x) : 0, 
                    (r.y !== undefined && r.y !== null) ? Number(r.y) : 0, 
-                   r.roomImage || null, 
+                   roomImagesJson, 
                    floorPlanId,
                    r.Notes || null,
                    r.id
@@ -319,10 +344,10 @@ export default {
           const isNew = !plan.id || isNaN(Number(plan.id));
           
           if (isNew) {
-          await env.DB.prepare(`
-            INSERT INTO FloorPlans (Location, Floor, Image_URL)
-            VALUES (?, ?, ?)
-          `).bind(buildingCode, plan.name, plan.imageUrl).run();
+              await env.DB.prepare(`
+                INSERT INTO FloorPlans (Location, Floor, Image_URL)
+                VALUES (?, ?, ?)
+              `).bind(buildingCode, plan.name, plan.imageUrl).run();
           } else {
               // Get old image URL before updating
               const oldPlan = await env.DB.prepare('SELECT Image_URL FROM FloorPlans WHERE id = ?').bind(plan.id).first();
@@ -348,6 +373,74 @@ export default {
               }
           }
           
+          return Response.json({ success: true }, { headers: corsHeaders });
+      }
+
+      // --- DELETE EQUIPMENT ---
+      if (url.pathname.startsWith('/api/equipment/') && method === 'DELETE') {
+          const id = url.pathname.split('/').pop();
+          
+          // Get equipment first to delete associated images
+          const equipment = await env.DB.prepare('SELECT Images FROM Equipment WHERE id = ?').bind(id).first();
+          if (equipment && equipment.Images) {
+              try {
+                  const images = safeJSONParse(equipment.Images, []);
+                  if (Array.isArray(images)) {
+                      // Delete all associated images from R2
+                      for (const imageUrl of images) {
+                          if (imageUrl && env.BUCKET) {
+                              try {
+                                  const urlObj = new URL(imageUrl);
+                                  const key = urlObj.pathname.substring(1);
+                                  if (key) {
+                                      await env.BUCKET.delete(key);
+                                  }
+                              } catch (e) {
+                                  console.warn("Failed to delete equipment image:", imageUrl, e);
+                              }
+                          }
+                      }
+                  }
+              } catch (e) {
+                  console.warn("Failed to parse equipment images:", e);
+              }
+          }
+          
+          await env.DB.prepare('DELETE FROM Equipment WHERE id = ?').bind(id).run();
+          return Response.json({ success: true }, { headers: corsHeaders });
+      }
+
+      // --- DELETE ROOM ---
+      if (url.pathname.startsWith('/api/rooms/') && method === 'DELETE') {
+          const id = url.pathname.split('/').pop();
+          
+          // Get room first to delete associated images
+          const room = await env.DB.prepare('SELECT Room_Panorama_URL FROM Rooms WHERE id = ?').bind(id).first();
+          if (room && room.Room_Panorama_URL) {
+              try {
+                  const roomImages = safeJSONParse(room.Room_Panorama_URL, []);
+                  const imagesArray = Array.isArray(roomImages) ? roomImages : (room.Room_Panorama_URL ? [room.Room_Panorama_URL] : []);
+                  
+                  // Delete all associated images from R2
+                  for (const imageUrl of imagesArray) {
+                      if (imageUrl && env.BUCKET) {
+                          try {
+                              const urlObj = new URL(imageUrl);
+                              const key = urlObj.pathname.substring(1);
+                              if (key) {
+                                  await env.BUCKET.delete(key);
+                              }
+                          } catch (e) {
+                              console.warn("Failed to delete room image:", imageUrl, e);
+                          }
+                      }
+                  }
+              } catch (e) {
+                  console.warn("Failed to parse room images:", e);
+              }
+          }
+          
+          await env.DB.prepare('DELETE FROM Rooms WHERE id = ?').bind(id).run();
           return Response.json({ success: true }, { headers: corsHeaders });
       }
 

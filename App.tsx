@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Routes, 
   Route, 
@@ -47,6 +47,8 @@ import { LoginScreen } from './src/components/auth/LoginScreen';
 import { FullScreenViewer } from './src/components/common/FullScreenViewer';
 import { LoadingScreen } from './src/components/common/LoadingScreen';
 import { SidebarItem } from './src/components/common/SidebarItem';
+import { ScrollToTop } from './src/components/common/ScrollToTop';
+import { useToast } from './src/components/common/Toast';
 import { Dashboard } from './src/components/dashboard/Dashboard';
 import { EquipmentList } from './src/components/equipment/EquipmentList';
 import { EquipmentDetailRoute } from './src/components/equipment/EquipmentDetailRoute';
@@ -54,15 +56,16 @@ import { BuildingList } from './src/components/rooms/BuildingList';
 import { BuildingDetail } from './src/components/rooms/BuildingDetail';
 import { RoomDetail } from './src/components/rooms/RoomDetail';
 import { FloorPlanManager } from './src/components/rooms/FloorPlanManager';
-import { RoomList } from './src/components/rooms/RoomList';
+import { RoomList } from '@/src/components/rooms/RoomList';
 
-// Static login credentials
-const STATIC_USERNAME = 'facilityuw';
-const STATIC_PASSWORD = 'Facility2601';
+// Static login credentials from environment variables
+const STATIC_USERNAME = import.meta.env.VITE_AUTH_USERNAME;
+const STATIC_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD;
 
 const App = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
 
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -75,10 +78,28 @@ const App = () => {
   const [error, setError] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  const [searchTerm, setSearchTerm] = useState('');
 
-  // Image Viewer State
-  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  // Image Viewer State with marker coordinates support
+  interface FullScreenImageData {
+    imageUrl: string;
+    markerX?: number; // Percentage (0-100)
+    markerY?: number; // Percentage (0-100)
+  }
+
+  const [fullScreenImage, setFullScreenImage] = useState<FullScreenImageData | null>(null);
+  
+  // Handler for setting fullscreen image (backward compatible with string or object)
+  const handleSetFullScreenImage = useCallback((imageUrlOrData: string | FullScreenImageData | null) => {
+    if (!imageUrlOrData) {
+      setFullScreenImage(null);
+      return;
+    }
+    if (typeof imageUrlOrData === 'string') {
+      setFullScreenImage({ imageUrl: imageUrlOrData });
+    } else {
+      setFullScreenImage(imageUrlOrData);
+    }
+  }, []);
   
   // Load data on mount (only if authenticated)
   useEffect(() => {
@@ -101,20 +122,20 @@ const App = () => {
   };
 
   // -- Navigation Helpers --
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('isAuthenticated');
     setIsAuthenticated(false);
     // Reset app state
     setData([]);
     navigate('/');
     setIsMobileMenuOpen(false);
-  };
+  }, [navigate]);
 
   // -- Feature: Find Maintenance Room from Equipment --
-  const findMaintenanceRoom = (eq: Equipment) => {
+  const findMaintenanceRoom = useCallback((eq: Equipment) => {
     const building = data.find(b => b.code === eq.Location);
     if (!building) {
-        alert("Building not found for this equipment.");
+        showToast("Building not found for this equipment.", 'error');
         return;
     }
     const room = building.maintenanceRooms.find(r => r.RoomNumber === eq.Room);
@@ -125,16 +146,16 @@ const App = () => {
     }
     // Found it - Navigate
     navigate(`/building/${building.code}/room/${room.id}`);
-  };
+  }, [data, navigate, showToast]);
 
   // -- Data Modification Helpers --
 
-  const addBuilding = async (code: string, name: string) => {
+  const addBuilding = useCallback(async (code: string, name: string) => {
       // For now, client side update until backend supports explicit CreateBuilding beyond Seed
       // Realistically, Seed handles this, or we adapt API to allow new building creation
       // Implementing local optimistic update + simple API push
       if (data.some(b => b.code === code)) {
-          alert("Building code already exists!");
+          showToast("Building code already exists!", 'warning');
           return;
       }
       const newBuilding: BuildingData = {
@@ -150,18 +171,20 @@ const App = () => {
       try {
         await api.saveBuilding(newBuilding);
         // Optimistic
-        setData([...data, newBuilding].sort((a,b) => a.name.localeCompare(b.name)));
+          setData([...data, newBuilding].sort((a,b) => a.name.localeCompare(b.name)));
+          showToast("Building created successfully", 'success');
       } catch (e) {
-        alert("Failed to create building");
+        showToast("Failed to create building", 'error');
       }
-  };
+  }, [data, showToast]);
 
-  const saveEquipment = async (eq: Equipment) => {
+  const saveEquipment = useCallback(async (eq: Equipment) => {
     try {
         const savedEq = await api.saveEquipment(eq);
         
         // Optimistic / Local Update
-        const newData = [...data];
+        setData(prevData => {
+          const newData = [...prevData];
         newData.forEach(b => {
              b.equipment = b.equipment.filter(e => e.id !== eq.id);
         });
@@ -171,19 +194,22 @@ const App = () => {
 
         if (target) {
             target.equipment.push(savedEq);
-            setData(newData);
         }
+          return newData;
+        });
+        showToast("Equipment saved successfully", 'success');
     } catch (e) {
-        alert("Failed to save equipment to cloud.");
+        showToast("Failed to save equipment", 'error');
     }
-  };
+  }, [showToast]);
 
-  const saveRoom = async (room: MaintenanceRoom, targetBuildingCode: string): Promise<MaintenanceRoom | null> => {
+  const saveRoom = useCallback(async (room: MaintenanceRoom, targetBuildingCode: string): Promise<MaintenanceRoom | null> => {
       try {
         const savedRoom = await api.saveRoom(room);
-        const newData = [...data];
+        setData(prevData => {
+          const newData = [...prevData];
         const building = newData.find(b => b.code === targetBuildingCode);
-        if (!building) return null;
+          if (!building) return prevData;
 
         const existingIdx = building.maintenanceRooms.findIndex(r => r.id === room.id);
         if (existingIdx >= 0) {
@@ -191,15 +217,58 @@ const App = () => {
         } else {
             building.maintenanceRooms.push(savedRoom);
         }
-        setData(newData);
-        return savedRoom;
-      } catch (e) {
-        alert("Failed to save room.");
-        return null;
-      }
-  };
+          return newData;
+        });
+            showToast("Room saved successfully", 'success');
+            return savedRoom;
+          } catch (e) {
+            showToast("Failed to save room", 'error');
+            return null;
+          }
+  }, [showToast]);
 
-  const updateFloorPlans = async (buildingCode: string, plans: FloorPlan[], newPlan?: FloorPlan) => {
+  const deleteEquipment = useCallback(async (equipmentId: string) => {
+      if (!window.confirm("Are you sure you want to delete this equipment? This action cannot be undone.")) {
+          return;
+      }
+      try {
+          await api.deleteEquipment(equipmentId);
+          setData(prevData => {
+            const newData = [...prevData];
+            newData.forEach(building => {
+                building.equipment = building.equipment.filter(eq => eq.id !== equipmentId);
+            });
+            return newData;
+          });
+          showToast("Equipment deleted successfully", 'success');
+          navigate('/equipment');
+      } catch (e) {
+          showToast("Failed to delete equipment", 'error');
+      }
+  }, [navigate, showToast]);
+
+  const deleteRoom = useCallback(async (roomId: string, buildingCode: string) => {
+      if (!window.confirm("Are you sure you want to delete this room? This action cannot be undone.")) {
+          return;
+      }
+      try {
+          await api.deleteRoom(roomId);
+          setData(prevData => {
+            const newData = [...prevData];
+            const building = newData.find(b => b.code === buildingCode);
+            if (building) {
+                building.maintenanceRooms = building.maintenanceRooms.filter(r => r.id !== roomId);
+            }
+            return newData;
+          });
+              showToast("Room deleted successfully", 'success');
+              navigate(`/building/${buildingCode}`);
+          } catch (e) {
+              showToast("Failed to delete room", 'error');
+          }
+  }, [navigate, showToast]);
+
+  const updateFloorPlans = useCallback(async (buildingCode: string, plans: FloorPlan[], newPlan?: FloorPlan) => {
     try {
         if (newPlan) {
             await api.saveFloorPlan(buildingCode, newPlan);
@@ -207,31 +276,37 @@ const App = () => {
         // Note: Deletions are handled separately via deleteFloorPlan
         
         // Local Update
-        const newData = [...data];
+        setData(prevData => {
+          const newData = [...prevData];
         const bIndex = newData.findIndex(b => b.code === buildingCode);
-        if (bIndex === -1) return;
+          if (bIndex === -1) return prevData;
         newData[bIndex].floorPlans = plans;
-        setData(newData);
-    } catch (e) {
-        alert("Failed to update floor plans.");
-    }
-  };
+            return newData;
+          });
+          showToast("Floor plan updated successfully", 'success');
+        } catch (e) {
+            showToast("Failed to update floor plans", 'error');
+        }
+  }, [showToast]);
   
-  const deleteFloorPlan = async (buildingCode: string, planId: string) => {
+  const deleteFloorPlan = useCallback(async (buildingCode: string, planId: string) => {
       try {
           await api.deleteFloorPlan(planId);
-          const newData = [...data];
+          setData(prevData => {
+            const newData = [...prevData];
           const bIndex = newData.findIndex(b => b.code === buildingCode);
           if (bIndex !== -1) {
               newData[bIndex].floorPlans = newData[bIndex].floorPlans.filter(p => p.id !== planId);
-              setData(newData);
+              }
+            return newData;
+              });
+              showToast("Floor plan deleted successfully", 'success');
+          } catch (e) {
+              showToast("Failed to delete floor plan", 'error');
           }
-      } catch (e) {
-          alert("Failed to delete plan.");
-      }
-  };
+  }, [showToast]);
 
-  const updateBuilding = async (buildingCode: string, updates: Partial<BuildingData>) => {
+  const updateBuilding = useCallback(async (buildingCode: string, updates: Partial<BuildingData>) => {
     try {
         // Filter out undefined values before sending to API
         const sanitizedUpdates = Object.fromEntries(
@@ -239,16 +314,19 @@ const App = () => {
         ) as Partial<BuildingData>;
         
         await api.saveBuilding({ code: buildingCode, ...sanitizedUpdates });
-        const newData = [...data];
-        const bIndex = newData.findIndex(b => b.code === buildingCode);
-        if (bIndex === -1) return;
-        
-        newData[bIndex] = { ...newData[bIndex], ...sanitizedUpdates };
-        setData(newData);
-    } catch (e) {
-        alert("Failed to update building.");
-    }
-  };
+        setData(prevData => {
+          const newData = [...prevData];
+          const bIndex = newData.findIndex(b => b.code === buildingCode);
+          if (bIndex === -1) return prevData;
+          
+          newData[bIndex] = { ...newData[bIndex], ...sanitizedUpdates };
+          return newData;
+            });
+            showToast("Building updated successfully", 'success');
+        } catch (e) {
+            showToast("Failed to update building", 'error');
+        }
+  }, [showToast]);
 
   // Login Component
   // Show login screen if not authenticated
@@ -325,13 +403,12 @@ const App = () => {
         )}
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+          <ScrollToTop />
           <Routes>
             <Route path="/" element={<Dashboard data={data} />} />
             <Route path="/equipment" element={
               <EquipmentList 
                 data={data}
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
                 onSelectEquipment={(eq) => navigate(`/equipment/${eq.id}`)}
                 onNavigate={(view) => {
                   if (view === 'EQUIPMENT_DETAIL') return;
@@ -345,14 +422,13 @@ const App = () => {
                 data={data}
                 onSave={saveEquipment}
                 onFindRoom={findMaintenanceRoom}
-                onSetFullScreenImage={setFullScreenImage}
+                onSetFullScreenImage={handleSetFullScreenImage}
+                onDelete={deleteEquipment}
               />
             } />
             <Route path="/building" element={
               <BuildingList 
                 data={data}
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
                 onAddBuilding={addBuilding}
               />
             } />
@@ -360,7 +436,7 @@ const App = () => {
               <BuildingDetail 
                 data={data}
                 onUpdateBuilding={updateBuilding}
-                onSetFullScreenImage={setFullScreenImage}
+                onSetFullScreenImage={handleSetFullScreenImage}
                 onSaveRoom={saveRoom}
               />
             } />
@@ -368,7 +444,8 @@ const App = () => {
               <RoomDetail 
                 data={data}
                 onSaveRoom={saveRoom}
-                onSetFullScreenImage={setFullScreenImage}
+                onSetFullScreenImage={handleSetFullScreenImage}
+                onDeleteRoom={deleteRoom}
               />
             } />
             <Route path="/building/:code/floor-plans" element={
@@ -376,14 +453,12 @@ const App = () => {
                 data={data}
                 onUpdateFloorPlans={updateFloorPlans}
                 onDeleteFloorPlan={deleteFloorPlan}
-                onSetFullScreenImage={setFullScreenImage}
+                onSetFullScreenImage={handleSetFullScreenImage}
               />
             } />
             <Route path="/rooms" element={
               <RoomList 
                 data={data}
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
                 onSaveRoom={saveRoom}
               />
             } />
@@ -391,7 +466,12 @@ const App = () => {
         </div>
       </main>
 
-      <FullScreenViewer imageUrl={fullScreenImage} onClose={() => setFullScreenImage(null)} />
+      <FullScreenViewer 
+        imageUrl={fullScreenImage?.imageUrl || null} 
+        markerX={fullScreenImage?.markerX}
+        markerY={fullScreenImage?.markerY}
+        onClose={() => setFullScreenImage(null)} 
+      />
     </div>
   );
 };

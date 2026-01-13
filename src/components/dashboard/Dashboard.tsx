@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Building as BuildingIcon, Wrench, MapPin, Image as ImageIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { BuildingData } from '../../../types';
@@ -8,15 +8,27 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
-  const totalEquipment = data.reduce((acc, b) => acc + b.equipment.length, 0);
-  const totalRooms = data.reduce((acc, b) => acc + b.maintenanceRooms.length, 0);
-  const totalPlans = data.reduce((acc, b) => acc + b.floorPlans.length, 0);
+  const totalEquipment = useMemo(() => 
+    data.reduce((acc, b) => acc + b.equipment.length, 0), 
+    [data]
+  );
+  const totalRooms = useMemo(() => 
+    data.reduce((acc, b) => acc + b.maintenanceRooms.length, 0), 
+    [data]
+  );
+  const totalPlans = useMemo(() => 
+    data.reduce((acc, b) => acc + b.floorPlans.length, 0), 
+    [data]
+  );
   
-  const chartData = data.map(b => ({
-    name: b.code,
-    full: b.name,
-    count: b.equipment.length
-  })).sort((a,b) => b.count - a.count).slice(0, 10);
+  const chartData = useMemo(() => 
+    data.map(b => ({
+      name: b.code,
+      full: b.name,
+      count: b.equipment.length
+    })).sort((a,b) => b.count - a.count).slice(0, 10),
+    [data]
+  );
 
   return (
     <div className="space-y-6 animate-fade-in pb-16">
@@ -60,7 +72,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <h2 className="text-lg font-semibold mb-6 text-slate-700">Top Equipment Density by Building</h2>
-        <div className="h-64 md:h-80">
+        <div className="h-64 md:h-80 min-h-0">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />

@@ -3,6 +3,7 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { ArrowLeft, Plus, X, Upload, RefreshCw, Trash2, Image as ImageIcon } from 'lucide-react';
 import { BuildingData, FloorPlan } from '@/types';
 import { api } from '@/api';
+import { useToast } from '../common/Toast';
 
 interface FloorPlanManagerProps {
   data: BuildingData[];
@@ -19,6 +20,7 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
 }) => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   
   const selectedBuilding = useMemo(() => {
       return data.find(b => b.code === code) || null;
@@ -43,7 +45,7 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
                   // Replacing existing floor plan image
                   const existingPlan = selectedBuilding.floorPlans.find(p => p.id === editingPlanId);
                   if (!existingPlan) {
-                      alert("Floor plan not found");
+                      showToast("Floor plan not found", 'error');
                       setUploadingPlan(false);
                       setEditingPlanId(null);
                       return;
@@ -74,12 +76,13 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
                   setIsUploading(false);
               } else {
                   // This should only happen when creating a new plan without a name
-                  alert("Please enter a floor plan name");
+                  showToast("Please enter a floor plan name", 'warning');
                   setUploadingPlan(false);
                   return;
               }
+              showToast("Floor plan uploaded successfully", 'success');
           } catch (e) { 
-              alert("Upload failed"); 
+              showToast("Upload failed", 'error'); 
           } 
           finally { 
               setUploadingPlan(false);
@@ -101,7 +104,7 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
               try {
                   const existingPlan = selectedBuilding.floorPlans.find(p => p.id === planId);
                   if (!existingPlan) {
-                      alert("Floor plan not found");
+                      showToast("Floor plan not found", 'error');
                       setUploadingPlan(false);
                       setEditingPlanId(null);
                       return;
@@ -118,8 +121,9 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
                       p.id === planId ? updatedPlan : p
                   );
                   await onUpdateFloorPlans(selectedBuilding.code, updatedPlans, updatedPlan);
+                  showToast("Floor plan updated successfully", 'success');
               } catch (e) {
-                  alert("Upload failed");
+                  showToast("Upload failed", 'error');
               } finally {
                   setUploadingPlan(false);
                   setEditingPlanId(null);

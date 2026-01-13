@@ -1,23 +1,131 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Building as BuildingIcon, MapPin, Wrench, Camera, Plus, X, Pencil, ExternalLink, Image as ImageIcon, Map, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Building as BuildingIcon, MapPin, Wrench, Camera, Plus, X, Pencil, ExternalLink, Image as ImageIcon, Map, RefreshCw, ChevronRight, Trash2 } from 'lucide-react';
 import { BuildingData, MaintenanceRoom } from '@/types';
 import { api } from '@/api';
-import { FullscreenPanoramaViewer } from '../common/FullscreenPanoramaViewer';
+import { useToast } from '../common/Toast';
+
+// Component to handle floor plan with proper marker positioning
+const FloorPlanWithMarker: React.FC<{
+  imageUrl: string;
+  markerX?: number;
+  markerY?: number;
+  isEditing: boolean;
+  onMapClick: (e: React.MouseEvent<HTMLImageElement>) => void;
+  onFullScreenClick: () => void;
+}> = ({ imageUrl, markerX, markerY, isEditing, onMapClick, onFullScreenClick }) => {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [imageBounds, setImageBounds] = useState<{
+    displayWidth: number;
+    displayHeight: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (imgRef.current && containerRef.current) {
+      const img = imgRef.current;
+      const container = containerRef.current;
+      
+      const updateBounds = () => {
+        const containerRect = container.getBoundingClientRect();
+        const naturalWidth = img.naturalWidth;
+        const naturalHeight = img.naturalHeight;
+        
+        if (naturalWidth === 0 || naturalHeight === 0) return;
+        
+        const containerAspect = containerRect.width / containerRect.height;
+        const imageAspect = naturalWidth / naturalHeight;
+        
+        let displayWidth: number;
+        let displayHeight: number;
+        let offsetX: number;
+        let offsetY: number;
+        
+        if (containerAspect > imageAspect) {
+          // Container is wider - image is letterboxed
+          displayHeight = containerRect.height;
+          displayWidth = containerRect.height * imageAspect;
+          offsetX = (containerRect.width - displayWidth) / 2;
+          offsetY = 0;
+        } else {
+          // Container is taller - image is pillarboxed
+          displayWidth = containerRect.width;
+          displayHeight = containerRect.width / imageAspect;
+          offsetX = 0;
+          offsetY = (containerRect.height - displayHeight) / 2;
+        }
+        
+        setImageBounds({ displayWidth, displayHeight, offsetX, offsetY });
+      };
+      
+      updateBounds();
+      img.addEventListener('load', updateBounds);
+      window.addEventListener('resize', updateBounds);
+      return () => {
+        img.removeEventListener('load', updateBounds);
+        window.removeEventListener('resize', updateBounds);
+      };
+    }
+  }, [imageUrl]);
+
+  return (
+    <div ref={containerRef} className="relative w-full h-full">
+      <img 
+        ref={imgRef}
+        src={imageUrl} 
+        className={`w-full h-full object-contain ${isEditing ? 'cursor-crosshair' : 'cursor-zoom-in'}`}
+        onClick={(e) => {
+          if (isEditing) {
+            onMapClick(e);
+          } else {
+            onFullScreenClick();
+          }
+        }}
+        alt="Floor Plan"
+      />
+      {/* Pin - positioned relative to actual image content */}
+      {(markerX !== undefined && markerY !== undefined && imageBounds) && (
+        <div 
+          className="absolute transform -translate-x-1/2 -translate-y-full drop-shadow-lg pointer-events-none z-10"
+          style={{ 
+            left: `${imageBounds.offsetX + (markerX / 100) * imageBounds.displayWidth}px`, 
+            top: `${imageBounds.offsetY + (markerY / 100) * imageBounds.displayHeight}px` 
+          }}
+        >
+          <MapPin size={32} fill="#2563eb" stroke="white" strokeWidth={2} />
+        </div>
+      )}
+      
+      {/* Helper Text overlay */}
+      {isEditing && !markerX && (
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <div className="bg-black/50 text-white px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm">
+            Click map to set location
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface RoomDetailProps {
   data: BuildingData[];
   onSaveRoom: (room: MaintenanceRoom, buildingCode: string) => Promise<MaintenanceRoom | null>;
-  onSetFullScreenImage: (url: string | null) => void;
+  onSetFullScreenImage: (data: { imageUrl: string; markerX?: number; markerY?: number } | string | null) => void;
+  onDeleteRoom: (roomId: string, buildingCode: string) => Promise<void>;
 }
 
 export const RoomDetail: React.FC<RoomDetailProps> = ({
   data,
   onSaveRoom,
-  onSetFullScreenImage
+  onSetFullScreenImage,
+  onDeleteRoom
 }) => {
   const { code, id } = useParams<{ code: string; id: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   
   const selectedBuilding = useMemo(() => {
       return data.find(b => b.code === code) || null;
@@ -27,6 +135,13 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
       if (!selectedBuilding || !id) return null;
       return selectedBuilding.maintenanceRooms.find(r => r.id === id) || null;
   }, [selectedBuilding, id]);
+
+  const housedEquipment = useMemo(() => {
+      if (!selectedBuilding || !selectedRoom) return [];
+      return selectedBuilding.equipment.filter(
+          eq => eq.Room === selectedRoom.RoomNumber && eq.Location === selectedBuilding.code
+      );
+  }, [selectedBuilding, selectedRoom]);
 
   if (!selectedRoom || !selectedBuilding) {
       if (code) {
@@ -39,7 +154,8 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
   const [form, setForm] = useState(selectedRoom);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [show360Viewer, setShow360Viewer] = useState(false);
+  const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
   
   useEffect(() => {
       if (selectedRoom) {
@@ -58,26 +174,106 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          setIsUploadingImage(true);
-          try {
-              const oldImageUrl = form.roomImage;
-              const url = await api.uploadFile(e.target.files[0], oldImageUrl);
-              setForm({...form, roomImage: url});
-          } catch (e) { 
-              alert("Upload failed"); 
-          } finally {
-              setIsUploadingImage(false);
-          }
+      if (!e.target.files || e.target.files.length === 0) return;
+      
+      const files = Array.from(e.target.files) as File[];
+      const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
+      
+      setUploadingImageIds(new Set(tempIds));
+      setIsUploadingImage(true);
+      
+      try {
+          const uploadPromises = files.map(async (file, idx) => {
+              const tempId = tempIds[idx];
+              try {
+                  const url = await api.uploadFile(file);
+                  setUploadingImageIds(prev => {
+                      const next = new Set(prev);
+                      next.delete(tempId);
+                      return next;
+                  });
+                  return url;
+              } catch (err) {
+                  setUploadingImageIds(prev => {
+                      const next = new Set(prev);
+                      next.delete(tempId);
+                      return next;
+                  });
+                  throw err;
+              }
+          });
+          
+          const urls = await Promise.all(uploadPromises);
+          const currentImages = form.roomImages || [];
+          setForm({...form, roomImages: [...currentImages, ...urls]});
+          showToast("Images uploaded successfully", 'success');
+      } catch (err) {
+          showToast("Failed to upload some images. Please try again.", 'error');
+      } finally {
+          setIsUploadingImage(false);
+          setUploadingImageIds(new Set());
+          e.target.value = '';
       }
   };
 
-  const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleImageDelete = async (imageUrl: string) => {
+      await api.deleteImage(imageUrl);
+      setForm({...form, roomImages: (form.roomImages || []).filter(img => img !== imageUrl)});
+  };
+
+  const handleMapClick = (e: React.MouseEvent<HTMLImageElement>) => {
     if (!isEditing || !form.floorPlanId) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setForm({ ...form, x, y });
+    
+    const img = e.currentTarget;
+    const rect = img.getBoundingClientRect();
+    
+    // Get click position relative to the container
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    
+    // Calculate actual image bounds (accounting for object-contain letterboxing/pillarboxing)
+    const containerAspect = rect.width / rect.height;
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+    const imageAspect = naturalWidth / naturalHeight;
+    
+    let imageDisplayWidth: number;
+    let imageDisplayHeight: number;
+    let imageOffsetX: number;
+    let imageOffsetY: number;
+    
+    if (containerAspect > imageAspect) {
+      // Container is wider - image is letterboxed (pillarboxed)
+      imageDisplayHeight = rect.height;
+      imageDisplayWidth = rect.height * imageAspect;
+      imageOffsetX = (rect.width - imageDisplayWidth) / 2;
+      imageOffsetY = 0;
+    } else {
+      // Container is taller - image is pillarboxed (letterboxed)
+      imageDisplayWidth = rect.width;
+      imageDisplayHeight = rect.width / imageAspect;
+      imageOffsetX = 0;
+      imageOffsetY = (rect.height - imageDisplayHeight) / 2;
+    }
+    
+    // Check if click is within actual image bounds
+    const relativeX = clickX - imageOffsetX;
+    const relativeY = clickY - imageOffsetY;
+    
+    if (relativeX < 0 || relativeX > imageDisplayWidth || relativeY < 0 || relativeY > imageDisplayHeight) {
+      // Click is outside image bounds (in grey area) - ignore it
+      return;
+    }
+    
+    // Calculate percentage relative to the actual image content (0-100)
+    const x = (relativeX / imageDisplayWidth) * 100;
+    const y = (relativeY / imageDisplayHeight) * 100;
+    
+    // Clamp to ensure values are within bounds
+    const clampedX = Math.max(0, Math.min(100, x));
+    const clampedY = Math.max(0, Math.min(100, y));
+    
+    setForm({ ...form, x: clampedX, y: clampedY });
   };
 
   const linkedFloorPlan = selectedBuilding.floorPlans.find(fp => fp.id === form.floorPlanId);
@@ -92,23 +288,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                 <ArrowLeft size={20} className="mr-1" /> Back to {selectedBuilding.name}
             </button>
             <div className="flex space-x-2 self-end sm:self-auto">
-                {isEditing ? (
-                    <>
-                        <button 
-                            onClick={() => { setForm(selectedRoom); setIsEditing(false); }} 
-                            className="flex items-center px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium"
-                        >
-                            Cancel
-                        </button>
-                        <button 
-                            disabled={isUploading} 
-                            onClick={handleSave} 
-                            className="flex items-center px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium disabled:opacity-50"
-                        >
-                            {isUploading ? "Saving..." : "Save"}
-                        </button>
-                    </>
-                ) : (
+                {!isEditing && (
                     <button 
                         onClick={() => setIsEditing(true)} 
                         className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium"
@@ -209,6 +389,37 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                   </div>
 
                   <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                      <h3 className="font-bold text-slate-800 mb-4 flex items-center">
+                          <Wrench size={18} className="mr-2 text-brand-500"/> Housed Equipment
+                      </h3>
+                      {housedEquipment.length > 0 ? (
+                          <div className="space-y-2">
+                              {housedEquipment.map((eq) => (
+                                  <div
+                                      key={eq.id}
+                                      onClick={() => navigate(`/equipment/${eq.id}`)}
+                                      className="p-3 rounded-lg border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-colors cursor-pointer group"
+                                  >
+                                      <div className="flex items-center justify-between">
+                                          <div className="flex-1">
+                                              <div className="font-semibold text-slate-800 group-hover:text-brand-600 transition-colors">
+                                                  {eq.Equipment}
+                                              </div>
+                                              {eq.EquipmentDesc && (
+                                                  <div className="text-sm text-slate-600 mt-1">{eq.EquipmentDesc}</div>
+                                              )}
+                                          </div>
+                                          <ChevronRight size={20} className="text-slate-400 group-hover:text-brand-600 transition-colors" />
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      ) : (
+                          <div className="text-slate-500 text-sm py-4">No equipment found in this room.</div>
+                      )}
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
                        <div className="flex justify-between items-center mb-4">
                            <h3 className="font-bold text-slate-800 flex items-center">
                                <MapPin size={18} className="mr-2 text-brand-500"/> Floor Plan Location
@@ -229,32 +440,20 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                        
                        <div className="bg-slate-50 border border-slate-200 rounded-lg aspect-video flex items-center justify-center overflow-hidden relative group">
                            {linkedFloorPlan ? (
-                               <div className="relative w-full h-full" onClick={handleMapClick}>
-                                  <img 
-                                    src={linkedFloorPlan.imageUrl} 
-                                    className={`w-full h-full object-contain ${isEditing ? 'cursor-crosshair' : 'cursor-zoom-in'}`}
-                                    onClick={() => !isEditing && onSetFullScreenImage(linkedFloorPlan.imageUrl)}
-                                    alt="Floor Plan"
-                                  />
-                                  {/* Pin */}
-                                  {(form.x !== undefined && form.y !== undefined) && (
-                                      <div 
-                                        className="absolute transform -translate-x-1/2 -translate-y-full text-brand-600 drop-shadow-md pointer-events-none"
-                                        style={{ left: `${form.x}%`, top: `${form.y}%` }}
-                                      >
-                                          <MapPin size={32} fill="currentColor" />
-                                      </div>
-                                  )}
-                                  
-                                  {/* Helper Text overlay */}
-                                  {isEditing && !form.x && (
-                                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                                          <div className="bg-black/50 text-white px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm">
-                                              Click map to set location
-                                          </div>
-                                      </div>
-                                  )}
-                               </div>
+                               <FloorPlanWithMarker
+                                 imageUrl={linkedFloorPlan.imageUrl}
+                                 markerX={form.x}
+                                 markerY={form.y}
+                                 isEditing={isEditing}
+                                 onMapClick={handleMapClick}
+                                 onFullScreenClick={() => {
+                                   onSetFullScreenImage({
+                                     imageUrl: linkedFloorPlan.imageUrl,
+                                     markerX: form.x !== undefined ? form.x : undefined,
+                                     markerY: form.y !== undefined ? form.y : undefined
+                                   });
+                                 }}
+                               />
                            ) : (
                                <div className="text-center text-slate-400">
                                    <Map size={48} className="mx-auto mb-2 opacity-50"/>
@@ -269,103 +468,105 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
               <div className="space-y-6">
                   <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
                       <h3 className="font-bold text-slate-800 mb-4 flex items-center">
-                          <ImageIcon size={18} className="mr-2 text-brand-500"/> Room Panorama
+                          <ImageIcon size={18} className="mr-2 text-brand-500"/> Room Interior
                       </h3>
-                      <div className="relative aspect-video bg-slate-100 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden group">
-                           {form.roomImage ? (
-                               <>
-                                {isUploadingImage && (
-                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-                                        <div className="flex flex-col items-center">
-                                            <RefreshCw className="animate-spin text-white mb-3" size={32} />
-                                            <div className="w-full max-w-xs px-4">
-                                                <div className="w-full bg-white/30 rounded-full h-2 mb-2">
-                                                    <div className="bg-white h-2 rounded-full animate-pulse" style={{ width: '100%' }}></div>
-                                                </div>
-                                                <span className="text-sm text-white text-center block">Uploading image...</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                                <img 
-                                    src={form.roomImage} 
-                                    className="w-full h-full object-cover cursor-zoom-in" 
-                                    onClick={() => onSetFullScreenImage(form.roomImage || null)} 
-                                    alt="Room Panorama" 
-                                />
-                                {isEditing && !isUploadingImage && (
-                                    <>
-                                        <label className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-black/5 transition-colors opacity-0 group-hover:opacity-100 bg-black/0">
-                                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploadingImage}/>
-                                            <div className="bg-white/90 px-3 py-1 rounded-full text-xs font-bold text-slate-600 shadow-sm flex items-center">
-                                                <Camera size={12} className="mr-1"/> Replace
-                                            </div>
-                                        </label>
-                                        <button 
-                                            onClick={async (e) => { 
-                                                e.stopPropagation(); 
-                                                if (form.roomImage) {
-                                                    await api.deleteImage(form.roomImage);
-                                                }
-                                                setForm({...form, roomImage: undefined});
-                                            }} 
-                                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 z-10"
-                                        >
-                                            <X size={14}/>
-                                        </button>
-                                    </>
-                                )}
-                               </>
-                           ) : (
-                               <>
-                                   {isUploadingImage ? (
-                                       <div className="flex flex-col items-center w-full h-full justify-center p-4">
-                                           <RefreshCw className="animate-spin text-brand-600 mb-3" size={32} />
-                                           <div className="w-full max-w-xs px-4">
-                                               <div className="w-full bg-brand-200 rounded-full h-2 mb-2">
-                                                   <div className="bg-brand-600 h-2 rounded-full animate-pulse" style={{ width: '100%' }}></div>
-                                               </div>
-                                               <span className="text-sm text-brand-600 text-center block">Uploading image...</span>
-                                           </div>
-                                       </div>
-                                   ) : (
-                                       <div className="text-center p-4">
-                                           <Camera className="text-slate-400 mx-auto mb-2" size={32} />
-                                           <span className="text-xs text-slate-500 block">No panorama photo</span>
-                                       </div>
-                                   )}
-                               </>
-                           )}
-                           {isEditing && !form.roomImage && !isUploadingImage && (
-                                <label className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-black/5 transition-colors">
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploadingImage}/>
-                                    <div className="bg-white/90 px-3 py-1 rounded-full text-xs font-bold text-slate-600 shadow-sm flex items-center">
-                                        <Plus size={12} className="mr-1"/> Add
-                                    </div>
-                                </label>
-                           )}
+                      <div className="grid grid-cols-1 gap-4">
+                          {(form.roomImages || []).map((img, idx) => (
+                              <div key={idx} className="relative rounded-lg overflow-hidden aspect-video border border-slate-200 group cursor-zoom-in" onClick={() => onSetFullScreenImage(img)}>
+                                  <img src={img} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" alt={`Room interior ${idx + 1}`} />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                                  {isEditing && (
+                                      <button 
+                                          onClick={(e) => { 
+                                              e.stopPropagation(); 
+                                              handleImageDelete(img); 
+                                          }} 
+                                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors z-10"
+                                      >
+                                          <X size={12}/>
+                                      </button>
+                                  )}
+                              </div>
+                          ))}
+                          
+                          {/* Uploading Placeholders */}
+                          {Array.from(uploadingImageIds).map((tempId) => (
+                              <div key={tempId} className="relative rounded-lg overflow-hidden aspect-video border-2 border-dashed border-brand-300 bg-brand-50 flex items-center justify-center">
+                                  <div className="w-full h-full flex flex-col items-center justify-center p-4">
+                                      <RefreshCw className="animate-spin text-brand-600 mb-3" size={32} />
+                                      <div className="w-full max-w-xs">
+                                          <div className="w-full bg-brand-200 rounded-full h-2 mb-2">
+                                              <div className="bg-brand-600 h-2 rounded-full animate-pulse" style={{ width: '100%' }}></div>
+                                          </div>
+                                          <span className="text-sm text-brand-600 text-center block">Uploading image...</span>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                          
+                          {isEditing && (
+                              <label className={`border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  {isUploadingImage ? (
+                                      <RefreshCw className="animate-spin text-slate-400"/>
+                                  ) : (
+                                      <Plus size={24} className="text-slate-400" />
+                                  )}
+                                  <span className="text-sm text-slate-500 mt-2">
+                                      {isUploadingImage ? 'Uploading...' : `Add Photo${(form.roomImages || []).length > 0 ? ` (${(form.roomImages || []).length} photos)` : ''}`}
+                                  </span>
+                                  <input 
+                                      type="file" 
+                                      className="hidden" 
+                                      accept="image/*" 
+                                      onChange={handleImageUpload} 
+                                      multiple
+                                      disabled={isUploadingImage}
+                                  />
+                              </label>
+                          )}
                       </div>
-                      
-                      {/* View in 360 Button - Only show when image exists and not uploading */}
-                      {form.roomImage && !isUploadingImage && (
-                        <button
-                          onClick={() => setShow360Viewer(true)}
-                          className="mt-4 w-full bg-brand-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-700 transition-colors flex items-center justify-center gap-2"
-                        >
-                          <ImageIcon size={18} />
-                          View in 360°
-                        </button>
-                      )}
                   </div>
               </div>
           </div>
           
-          {/* Fullscreen 360 Viewer */}
-          {show360Viewer && form.roomImage && (
-            <FullscreenPanoramaViewer
-              imageUrl={form.roomImage}
-              onClose={() => setShow360Viewer(false)}
-            />
+          {/* Cancel, Save, and Delete buttons at bottom */}
+          {isEditing && (
+              <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-lg shadow-lg flex justify-between items-center">
+                  <button 
+                      onClick={async () => {
+                          setIsDeleting(true);
+                          try {
+                              await onDeleteRoom(form.id, selectedBuilding.code);
+                          } finally {
+                              setIsDeleting(false);
+                          }
+                      }}
+                      disabled={isUploading || isDeleting}
+                      className="flex items-center px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium disabled:opacity-50 transition-colors"
+                  >
+                      {isDeleting ? (
+                          <RefreshCw size={18} className="mr-2 animate-spin" />
+                      ) : (
+                          <Trash2 size={18} className="mr-2" />
+                      )}
+                      {isDeleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                  <div className="flex space-x-3">
+                      <button 
+                          onClick={() => { setForm(selectedRoom); setIsEditing(false); }} 
+                          className="flex items-center px-6 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                          disabled={isUploading} 
+                          onClick={handleSave} 
+                          className="flex items-center px-6 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium disabled:opacity-50 transition-colors"
+                      >
+                          {isUploading ? "Saving..." : "Save"}
+                      </button>
+                  </div>
+              </div>
           )}
       </div>
   );

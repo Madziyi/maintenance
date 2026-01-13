@@ -1,27 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Plus, X } from 'lucide-react';
 import { BuildingData } from '@/types';
 
 interface BuildingListProps {
   data: BuildingData[];
-  searchTerm: string;
-  onSearchChange: (term: string) => void;
   onAddBuilding: (code: string, name: string) => void;
 }
 
 export const BuildingList: React.FC<BuildingListProps> = ({
   data,
-  searchTerm,
-  onSearchChange,
   onAddBuilding
 }) => {
   const navigate = useNavigate();
   const [isAddingBuilding, setIsAddingBuilding] = useState(false);
   const [newBuildingCode, setNewBuildingCode] = useState('');
   const [newBuildingName, setNewBuildingName] = useState('');
+  
+  // Local search state (avoids re-rendering entire App on each keystroke)
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const filtered = data.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = useMemo(() => 
+    data.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [data, searchTerm]
+  );
   
   const handleAddBuilding = () => {
       if (!newBuildingCode || !newBuildingName) return;
@@ -42,7 +44,7 @@ export const BuildingList: React.FC<BuildingListProps> = ({
                           type="text" 
                           placeholder="Filter buildings..." 
                           value={searchTerm} 
-                          onChange={e => onSearchChange(e.target.value)} 
+                          onChange={e => setSearchTerm(e.target.value)} 
                           className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
                       />
                   </div>

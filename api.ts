@@ -1,6 +1,6 @@
 import { BuildingData, Equipment, MaintenanceRoom, FloorPlan } from './types';
 
-const API_URL = 'https://equiplocate.uwindsorfacility.workers.dev'; 
+const API_URL = import.meta.env.VITE_API_URL; 
 
 export const api = {
   // Check if backend is alive
@@ -82,6 +82,24 @@ export const api = {
         const text = await res.text();
         console.error("API Error /api/floorplans:", text);
         throw new Error(`Failed to save floor plan: ${text}`);
+    }
+  },
+
+  deleteEquipment: async (id: string): Promise<void> => {
+    const res = await fetch(`${API_URL}/api/equipment/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error delete /api/equipment:", text);
+        throw new Error(`Failed to delete equipment: ${text}`);
+    }
+  },
+
+  deleteRoom: async (id: string): Promise<void> => {
+    const res = await fetch(`${API_URL}/api/rooms/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error delete /api/rooms:", text);
+        throw new Error(`Failed to delete room: ${text}`);
     }
   },
 

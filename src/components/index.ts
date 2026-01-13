@@ -3,7 +3,6 @@ export { LoginScreen } from './auth/LoginScreen';
 
 // Common components
 export { FullScreenViewer } from './common/FullScreenViewer';
-export { FullscreenPanoramaViewer } from './common/FullscreenPanoramaViewer';
 export { LoadingScreen } from './common/LoadingScreen';
 export { SidebarItem } from './common/SidebarItem';
 

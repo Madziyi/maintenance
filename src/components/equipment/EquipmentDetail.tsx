@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { BuildingData, Equipment, ViewState } from '../../../types';
 import { api } from '../../../api';
+import { useToast } from '../../common/Toast';
 
 interface EquipmentDetailProps {
   equipment: Equipment | null;
@@ -10,6 +11,7 @@ interface EquipmentDetailProps {
   onSave: (equipment: Equipment) => Promise<void>;
   onFindRoom: (equipment: Equipment) => void;
   onSetFullScreenImage: (url: string) => void;
+  onDelete: () => Promise<void>;
 }
 
 export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
@@ -18,8 +20,10 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   onBack,
   onSave,
   onFindRoom,
-  onSetFullScreenImage
+  onSetFullScreenImage,
+  onDelete
 }) => {
+  const { showToast } = useToast();
   if (!equipment) return null;
 
   const exists = data.some(b => b.equipment.some(e => e.id === equipment.id));
@@ -27,6 +31,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   const [form, setForm] = useState(equipment);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const b = data.find(b => b.code === form.Location);
@@ -69,8 +74,9 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       const urls = await Promise.all(uploadPromises);
       const updated = { ...form, images: [...(form.images || []), ...urls] };
       setForm(updated);
+      showToast("Images uploaded successfully", 'success');
     } catch (err) {
-      alert("Failed to upload some images. Please try again.");
+      showToast("Failed to upload some images. Please try again.", 'error');
     } finally {
       setIsUploading(false);
       setUploadingImageIds(new Set());
@@ -98,14 +104,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
           <ArrowLeft size={20} className="mr-1" /> Back to List
         </button>
         <div className="flex space-x-2 self-end sm:self-auto">
-          {isEditing ? (
-            <>
-              {exists && <button onClick={() => { setForm(equipment); setIsEditing(false); }} className="flex items-center px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium">Cancel</button>}
-              <button disabled={isUploading} onClick={saveChanges} className="flex items-center px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium disabled:opacity-50">
-                {isUploading ? "Saving..." : "Save"}
-              </button>
-            </>
-          ) : (
+          {!isEditing && (
             <button onClick={() => setIsEditing(true)} className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium">
               <Pencil size={16} className="mr-2" /> Edit
             </button>
@@ -174,15 +173,30 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                   {label: "Manufacturer", key: "Manufacturer"},
                   {label: "Serial Number", key: "SerialNum"},
                   {label: "Vendor", key: "Vendor"},
-                ].map(({label, key}) => (
+                  {label: "Status", key: "status", isStatus: true},
+                ].map(({label, key, isStatus}) => (
                   <div key={key}>
                     <dt className="text-slate-500 text-sm mb-1">{label}</dt>
                     {isEditing ? (
-                      // @ts-ignore
-                      <input value={form[key] || ''} onChange={e => setForm({...form, [key]: e.target.value})} className="border rounded p-2 w-full text-sm" />
+                      isStatus ? (
+                        <select
+                          value={form.status || 'UNKNOWN'}
+                          onChange={e => setForm({...form, status: e.target.value as 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'})}
+                          className="border rounded p-2 w-full text-sm"
+                        >
+                          <option value="INACTIVE">INACTIVE</option>
+                          <option value="ONSHELF">ONSHELF</option>
+                          <option value="OPERATING">OPERATING</option>
+                          <option value="REPAIR">REPAIR</option>
+                          <option value="UNKNOWN">UNKNOWN</option>
+                        </select>
+                      ) : (
+                        // @ts-ignore
+                        <input value={form[key] || ''} onChange={e => setForm({...form, [key]: e.target.value})} className="border rounded p-2 w-full text-sm" />
+                      )
                     ) : (
                       // @ts-ignore
-                      <dd className="font-medium text-slate-800 break-words">{form[key] || "-"}</dd>
+                      <dd className="font-medium text-slate-800 break-words">{key === 'status' ? (form.status || 'UNKNOWN') : (form[key] || "-")}</dd>
                     )}
                   </div>
                 ))}
@@ -272,6 +286,48 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
           </div>
         </div>
       </div>
+      
+      {/* Cancel, Save, and Delete buttons at bottom */}
+      {isEditing && (
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-lg shadow-lg flex justify-between items-center">
+          <button 
+            onClick={async () => {
+              setIsDeleting(true);
+              try {
+                await onDelete();
+              } finally {
+                setIsDeleting(false);
+              }
+            }}
+            disabled={isUploading || isDeleting}
+            className="flex items-center px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium disabled:opacity-50 transition-colors"
+          >
+            {isDeleting ? (
+              <RefreshCw size={18} className="mr-2 animate-spin" />
+            ) : (
+              <Trash2 size={18} className="mr-2" />
+            )}
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </button>
+          <div className="flex space-x-3">
+            {exists && (
+              <button 
+                onClick={() => { setForm(equipment); setIsEditing(false); }} 
+                className="flex items-center px-6 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
+            <button 
+              disabled={isUploading} 
+              onClick={saveChanges} 
+              className="flex items-center px-6 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium disabled:opacity-50 transition-colors"
+            >
+              {isUploading ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

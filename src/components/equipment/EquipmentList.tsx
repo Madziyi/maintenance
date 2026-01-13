@@ -1,13 +1,12 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw } from 'lucide-react';
+import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info } from 'lucide-react';
 import { BuildingData, Equipment } from '../../../types';
 import { api } from '../../../api';
+import { useToast } from '../../common/Toast';
 
 interface EquipmentListProps {
   data: BuildingData[];
-  searchTerm: string;
-  onSearchChange: (term: string) => void;
   onSelectEquipment: (equipment: Equipment) => void;
   onNavigate: (view: string) => void;
   onSaveEquipment: (equipment: Equipment) => Promise<void>;
@@ -15,14 +14,16 @@ interface EquipmentListProps {
 
 export const EquipmentList: React.FC<EquipmentListProps> = ({
   data,
-  searchTerm,
-  onSearchChange,
   onSelectEquipment,
   onNavigate,
   onSaveEquipment
 }) => {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const allEquipment = data.flatMap(b => b.equipment);
+  
+  // Local search state (avoids re-rendering entire App on each keystroke)
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Add Equipment state
   const [isAddingEquipment, setIsAddingEquipment] = useState(false);
@@ -35,6 +36,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const [newEquipmentVendor, setNewEquipmentVendor] = useState('');
   const [newEquipmentSerialNum, setNewEquipmentSerialNum] = useState('');
   const [newEquipmentNotes, setNewEquipmentNotes] = useState('');
+  const [newEquipmentStatus, setNewEquipmentStatus] = useState<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'>('UNKNOWN');
   const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
@@ -43,14 +45,17 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const [showLocationFilter, setShowLocationFilter] = useState(false);
   const [showRoomFilter, setShowRoomFilter] = useState(false);
   const [showDescriptionFilter, setShowDescriptionFilter] = useState(false);
+  const [showStatusFilter, setShowStatusFilter] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
   const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   
   // Refs for dropdowns
   const locationDropdownRef = useRef<HTMLDivElement>(null);
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const descriptionDropdownRef = useRef<HTMLDivElement>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
   
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -63,6 +68,9 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       }
       if (descriptionDropdownRef.current && !descriptionDropdownRef.current.contains(event.target as Node)) {
         setShowDescriptionFilter(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusFilter(false);
       }
     };
     
@@ -141,6 +149,16 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     return descriptions;
   }, [allEquipment]);
 
+  // Status options
+  const statusOptions: Array<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'> = ['INACTIVE', 'ONSHELF', 'OPERATING', 'REPAIR', 'UNKNOWN'];
+  
+  const statusOptionsWithCounts = useMemo(() => {
+    return statusOptions.map(status => ({
+      value: status,
+      count: allEquipment.filter(e => (e.status || 'UNKNOWN') === status).length
+    }));
+  }, [allEquipment]);
+
   // Filtered equipment
   const filtered = useMemo(() => {
     return allEquipment.filter(e => {
@@ -177,9 +195,25 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
           e.EquipmentDesc?.trim().toLowerCase() === selected.toLowerCase()
         );
       
-      return searchMatch && locationMatch && roomMatch && descMatch;
+      // Status filter
+      const statusMatch = selectedStatuses.length === 0 ||
+        selectedStatuses.includes(e.status || 'UNKNOWN');
+      
+      return searchMatch && locationMatch && roomMatch && descMatch && statusMatch;
     });
-  }, [allEquipment, searchTerm, selectedLocations, selectedRooms, selectedDescriptions]);
+  }, [allEquipment, searchTerm, selectedLocations, selectedRooms, selectedDescriptions, selectedStatuses]);
+
+  // Pagination - limit displayed items for performance
+  const ITEMS_PER_PAGE = 50;
+  const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
+  
+  // Reset display limit when filters change
+  useEffect(() => {
+    setDisplayLimit(ITEMS_PER_PAGE);
+  }, [searchTerm, selectedLocations, selectedRooms, selectedDescriptions, selectedStatuses]);
+  
+  const displayedItems = useMemo(() => filtered.slice(0, displayLimit), [filtered, displayLimit]);
+  const hasMoreItems = filtered.length > displayLimit;
 
   // Toggle functions
   const toggleLocation = (code: string) => {
@@ -226,10 +260,19 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     );
   };
 
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses(prev => 
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
   const clearFilters = () => {
     setSelectedLocations([]);
     setSelectedRooms([]);
     setSelectedDescriptions([]);
+    setSelectedStatuses([]);
   };
 
   const removeLocation = (code: string) => {
@@ -244,9 +287,14 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     toggleDescription(desc);
   };
 
+  const removeStatus = (status: string) => {
+    toggleStatus(status);
+  };
+
   const hasActiveFilters = selectedLocations.length > 0 || 
     selectedRooms.length > 0 || 
-    selectedDescriptions.length > 0;
+    selectedDescriptions.length > 0 ||
+    selectedStatuses.length > 0;
 
   // Get available rooms for selected building
   const availableRooms = useMemo(() => {
@@ -309,7 +357,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       const urls = await Promise.all(uploadPromises);
       setNewEquipmentImages(prev => [...prev, ...urls]);
     } catch (err) {
-      alert("Failed to upload some images. Please try again.");
+      showToast("Failed to upload some images. Please try again.", 'error');
     } finally {
       setIsUploadingImages(false);
       setUploadingImageIds(new Set());
@@ -322,18 +370,19 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     try {
       await api.deleteImage(imageUrl);
       setNewEquipmentImages(prev => prev.filter(img => img !== imageUrl));
+      showToast("Image deleted successfully", 'success');
     } catch (err) {
-      alert("Failed to delete image.");
+      showToast("Failed to delete image", 'error');
     }
   };
 
   const handleSaveNewEquipment = async () => {
     if (!newEquipmentName.trim()) {
-      alert("Equipment name is required");
+      showToast("Equipment name is required", 'warning');
       return;
     }
     if (!newEquipmentLocation) {
-      alert("Please select a location");
+      showToast("Please select a location", 'warning');
       return;
     }
     
@@ -357,7 +406,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
         PurchaseDate: '',
         WarrantyDate: '',
         images: newEquipmentImages,
-        status: 'Active'
+        status: newEquipmentStatus
       };
       
       // Save the equipment
@@ -377,10 +426,12 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       setNewEquipmentVendor('');
       setNewEquipmentSerialNum('');
       setNewEquipmentNotes('');
+      setNewEquipmentStatus('UNKNOWN');
       setNewEquipmentImages([]);
       setUploadingImageIds(new Set());
+      showToast("Equipment created successfully", 'success');
     } catch (error) {
-      alert("Failed to create equipment. Please try again.");
+      showToast("Failed to create equipment. Please try again.", 'error');
     } finally {
       setIsSaving(false);
     }
@@ -448,7 +499,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
               placeholder="Search equipment..." 
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-slate-200 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
               value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex space-x-2">
@@ -658,6 +709,63 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
             )}
           </div>
 
+          {/* Status Filter Dropdown */}
+          <div className="relative" ref={statusDropdownRef}>
+            <button
+              onClick={() => {
+                setShowStatusFilter(!showStatusFilter);
+                setShowLocationFilter(false);
+                setShowRoomFilter(false);
+                setShowDescriptionFilter(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                selectedStatuses.length > 0
+                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Info size={14} />
+              Status
+              {selectedStatuses.length > 0 && (
+                <span className="bg-brand-600 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                  {selectedStatuses.length}
+                </span>
+              )}
+              <ChevronDown size={14} className={showStatusFilter ? 'transform rotate-180' : ''} />
+            </button>
+            
+            {showStatusFilter && (
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                <div className="p-3">
+                  <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                    Select Status ({statusOptionsWithCounts.length})
+                  </div>
+                  <div className="space-y-1.5">
+                    {statusOptionsWithCounts.map(status => (
+                      <label
+                        key={status.value}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedStatuses.includes(status.value)}
+                          onChange={() => toggleStatus(status.value)}
+                          className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-sm text-slate-700 flex-1">
+                          {status.value}
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          ({status.count})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Active Filter Chips */}
           {hasActiveFilters && (
             <>
@@ -723,6 +831,22 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 </div>
               ))}
               
+              {selectedStatuses.map(status => (
+                <div
+                  key={status}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm"
+                >
+                  <Info size={12} />
+                  <span>{status}</span>
+                  <button
+                    onClick={() => removeStatus(status)}
+                    className="hover:bg-brand-200 rounded p-0.5 transition-colors flex-shrink-0"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              
               <button
                 onClick={clearFilters}
                 className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors px-2 py-1"
@@ -753,8 +877,8 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.length > 0 ? (
-                filtered.map((e) => (
+              {displayedItems.length > 0 ? (
+                displayedItems.map((e) => (
                   <tr 
                     key={e.id} 
                     onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
@@ -782,8 +906,8 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
 
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-slate-100">
-          {filtered.length > 0 ? (
-            filtered.map((e) => (
+          {displayedItems.length > 0 ? (
+            displayedItems.map((e) => (
               <div 
                 key={e.id} 
                 onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
@@ -811,6 +935,24 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
               }
             </div>
           )}
+        </div>
+        
+        {/* Show More / Pagination */}
+        {hasMoreItems && (
+          <div className="p-4 border-t border-slate-100 text-center">
+            <button
+              onClick={() => setDisplayLimit(prev => prev + ITEMS_PER_PAGE)}
+              className="px-6 py-2 bg-brand-100 text-brand-700 rounded-lg font-medium hover:bg-brand-200 transition-colors"
+            >
+              Show more ({filtered.length - displayLimit} remaining)
+            </button>
+          </div>
+        )}
+        
+        {/* Item count summary */}
+        <div className="p-3 bg-slate-50 border-t border-slate-100 text-center text-sm text-slate-500">
+          Showing {displayedItems.length} of {filtered.length} items
+          {filtered.length !== allEquipment.length && ` (${allEquipment.length} total)`}
         </div>
       </div>
 
@@ -903,6 +1045,21 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 {!newEquipmentLocation && (
                   <p className="text-xs text-slate-400 mt-1">Please select a building first</p>
                 )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">
+                  Status
+                </label>
+                <select
+                  value={newEquipmentStatus}
+                  onChange={(e) => setNewEquipmentStatus(e.target.value as 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN')}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                >
+                  {statusOptions.map(status => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
               </div>
               
               <div>

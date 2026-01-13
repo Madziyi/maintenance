@@ -4,6 +4,7 @@ import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, Extern
 import { BuildingData } from '@/types';
 import { MaintenanceRoom } from '@/types';
 import { api } from '@/api';
+import { useToast } from '../common/Toast';
 
 interface BuildingDetailProps {
   data: BuildingData[];
@@ -20,6 +21,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
 }) => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   
   const selectedBuilding = useMemo(() => {
       return data.find(b => b.code === code) || null;
@@ -106,7 +108,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
 
   const handleSaveNewRoom = async () => {
       if (!newRoomNumber.trim()) {
-          alert("Room number is required");
+          showToast("Room number is required", 'warning');
           return;
       }
       
@@ -130,9 +132,10 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
               setNewRoomFloor('');
               setNewRoomDescription('');
               navigate(`/building/${selectedBuilding.code}/room/${savedRoom.id}`);
+              showToast("Room created successfully", 'success');
           }
       } catch (error) {
-          alert("Failed to create room. Please try again.");
+          showToast("Failed to create room. Please try again.", 'error');
       } finally {
           setIsSaving(false);
       }
@@ -152,8 +155,9 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
               const oldImageUrl = selectedBuilding.buildingImage;
               const url = await api.uploadFile(e.target.files[0], oldImageUrl);
               onUpdateBuilding(selectedBuilding.code, { buildingImage: url });
+              showToast("Building image uploaded successfully", 'success');
           } catch(e) { 
-              alert("Upload failed"); 
+              showToast("Upload failed", 'error'); 
           } finally {
               setIsUploadingBuildingImage(false);
           }
