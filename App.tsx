@@ -348,7 +348,7 @@ const App = () => {
            <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center shadow-lg shadow-brand-500/30">
              <MapPin className="text-white" size={20} />
            </div>
-           <span className="text-xl font-bold tracking-tight">EquipLocate</span>
+           <span className="text-xl font-bold tracking-tight">WayFinder</span>
         </div>
         
         <nav className="flex-1 py-6 space-y-1">
@@ -367,7 +367,7 @@ const App = () => {
               <LogOut size={16} />
               <span>Logout</span>
             </button>
-            <p className="text-brand-200 text-xs text-center">&copy; 2024 EquipLocate v2.0</p>
+            <p className="text-brand-200 text-xs text-center">&copy; 2024 WayFinder v2.0</p>
         </div>
       </aside>
 
@@ -379,7 +379,7 @@ const App = () => {
                <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
                  <MapPin className="text-white" size={18} />
                </div>
-            <span className="text-lg font-bold">EquipLocate</span>
+            <span className="text-lg font-bold">WayFinder</span>
            </div>
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}

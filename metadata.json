@@ -1,5 +1,5 @@
 {
-  "name": "EquipLocate",
+  "name": "WayFinder",
   "description": "A facility management dashboard for tracking equipment, maintenance room locations, and managing floor plans.",
   "requestFramePermissions": [
     "camera"

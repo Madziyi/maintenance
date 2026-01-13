@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker for EquipLocate
+ * Cloudflare Worker for WayFinder
  * Bindings:
  * - DB: D1 Database
  * - BUCKET: R2 Bucket

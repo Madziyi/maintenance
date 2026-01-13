@@ -37,7 +37,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, staticUsernam
           <div className="inline-flex items-center justify-center w-16 h-16 bg-brand-600 rounded-xl mb-4 shadow-lg">
             <Lock className="text-white" size={32} />
           </div>
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">EquipLocate</h1>
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">WayFinder</h1>
           <p className="text-slate-500">Please sign in to continue</p>
         </div>
 
@@ -99,7 +99,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, staticUsernam
         </form>
 
         <div className="mt-6 text-center text-xs text-slate-500">
-          <p>&copy; 2024 EquipLocate v2.0</p>
+          <p>&copy; 2024 WayFinder v2.0</p>
         </div>
       </div>
     </div>

@@ -35,7 +35,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Facility Overview</h1>
-          <p className="text-slate-500">Welcome to EquipLocate Dashboard</p>
+          <p className="text-slate-500">Welcome to WayFinder Dashboard</p>
         </div>
       </header>
       
