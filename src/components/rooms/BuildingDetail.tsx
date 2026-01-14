@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2 } from 'lucide-react';
 import { BuildingData } from '@/types';
 import { MaintenanceRoom } from '@/types';
 import { api } from '@/api';
@@ -11,13 +11,15 @@ interface BuildingDetailProps {
   onUpdateBuilding: (buildingCode: string, updates: Partial<BuildingData>) => Promise<void>;
   onSetFullScreenImage: (url: string | null) => void;
   onSaveRoom: (room: MaintenanceRoom, buildingCode: string) => Promise<MaintenanceRoom | null>;
+  canEdit: boolean;
 }
 
 export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   data,
   onUpdateBuilding,
   onSetFullScreenImage,
-  onSaveRoom
+  onSaveRoom,
+  canEdit,
 }) => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
@@ -103,7 +105,31 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   const hasActiveFilters = selectedFloors.length > 0 || selectedDescriptions.length > 0;
 
   const handleCreateRoom = () => {
+      if (!canEdit) return;
       setIsAddingRoom(true);
+  };
+
+  const handleShareBuilding = async () => {
+      if (!selectedBuilding) return;
+
+      const url = `${window.location.origin}/building/${selectedBuilding.code}`;
+      const title = selectedBuilding.name;
+      const text = `Maintenance rooms for ${selectedBuilding.name} (${selectedBuilding.code})`;
+
+      try {
+          if (navigator.share) {
+              await navigator.share({ title, text, url });
+          } else if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(url);
+              showToast('Building link copied to clipboard', 'success');
+          } else {
+              showToast('Sharing not supported in this browser', 'warning');
+          }
+      } catch (err: unknown) {
+          if ((err as Error)?.name !== 'AbortError') {
+              showToast('Failed to share building link', 'error');
+          }
+      }
   };
 
   const handleSaveNewRoom = async () => {
@@ -179,16 +205,26 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                       <p className="text-slate-500 text-sm">Select a maintenance room to view details</p>
                   </div>
               </div>
-              <button 
-                  onClick={handleCreateRoom} 
-                  className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 shadow-sm"
-              >
-                  <Plus size={18} className="mr-2" /> Add Room
-              </button>
+              <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto">
+                  {canEdit && (
+                    <button 
+                        onClick={handleCreateRoom} 
+                        className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 shadow-sm"
+                    >
+                        <Plus size={18} className="mr-2" /> Add Room
+                    </button>
+                  )}
+                  <button
+                      onClick={handleShareBuilding}
+                      className="w-full md:w-auto bg-white text-slate-700 px-4 py-2 rounded-lg font-medium flex items-center justify-center border border-slate-200 hover:bg-slate-50 shadow-sm"
+                  >
+                      <Share2 size={18} className="mr-2" /> Share
+                  </button>
+              </div>
           </div>
 
           {/* Add Room Modal */}
-          {isAddingRoom && (
+          {canEdit && isAddingRoom && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                   <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-fade-in">
                       <div className="flex justify-between items-center mb-4">
@@ -325,13 +361,15 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                            )}
                        </>
                    )}
-                   <label 
-                      className={`absolute bottom-2 right-2 bg-white/90 hover:bg-white text-slate-700 p-2 rounded-full cursor-pointer shadow-sm transition-colors ${isUploadingBuildingImage ? 'opacity-50 pointer-events-none' : ''}`}
-                      onClick={e => e.stopPropagation()}
-                   >
-                       <Camera size={16} />
-                       <input type="file" className="hidden" accept="image/*" onChange={handleBuildingImageUpload} disabled={isUploadingBuildingImage}/>
-                   </label>
+                   {canEdit && (
+                     <label 
+                        className={`absolute bottom-2 right-2 bg-white/90 hover:bg-white text-slate-700 p-2 rounded-full cursor-pointer shadow-sm transition-colors ${isUploadingBuildingImage ? 'opacity-50 pointer-events-none' : ''}`}
+                        onClick={e => e.stopPropagation()}
+                     >
+                         <Camera size={16} />
+                         <input type="file" className="hidden" accept="image/*" onChange={handleBuildingImageUpload} disabled={isUploadingBuildingImage}/>
+                     </label>
+                   )}
                </div>
                <div className="flex-1 space-y-4">
                    <div>
@@ -354,6 +392,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       onChange={(e) => onUpdateBuilding(selectedBuilding.code, { googleMapsLink: e.target.value })}
                                       className="flex-grow border border-slate-200 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none"
                                       placeholder="https://maps.google.com/..."
+                                      readOnly={!canEdit}
                                   />
                                   {selectedBuilding.googleMapsLink && (
                                       <a 

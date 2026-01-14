@@ -10,13 +10,15 @@ interface EquipmentListProps {
   onSelectEquipment: (equipment: Equipment) => void;
   onNavigate: (view: string) => void;
   onSaveEquipment: (equipment: Equipment) => Promise<void>;
+  canEdit: boolean;
 }
 
 export const EquipmentList: React.FC<EquipmentListProps> = ({
   data,
   onSelectEquipment,
   onNavigate,
-  onSaveEquipment
+  onSaveEquipment,
+  canEdit,
 }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -308,6 +310,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   }, [data, newEquipmentLocation]);
 
   const handleCreate = () => {
+    if (!canEdit) return;
     setIsAddingEquipment(true);
     // Pre-select first building if available
     if (data.length > 0 && !newEquipmentLocation) {
@@ -325,7 +328,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     
-    const files = Array.from(e.target.files);
+    const files: File[] = Array.from(e.target.files);
     const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
     
     // Mark all as uploading
@@ -506,9 +509,11 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
             <button onClick={handleExport} className="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-slate-50 whitespace-nowrap shadow-sm">
               <Download size={18} className="mr-2" /> Export
             </button>
-            <button onClick={handleCreate} className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm">
-              <Plus size={18} className="mr-2" /> Add
-            </button>
+            {canEdit && (
+              <button onClick={handleCreate} className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm">
+                <Plus size={18} className="mr-2" /> Add
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -863,8 +868,9 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
         </div>
       </div>
 
-      {/* Equipment List Table - Part of page scroll */}
+
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left">
@@ -873,7 +879,8 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 <th className="py-3 pl-6">ID</th>
                 <th className="py-3">Description</th>
                 <th className="py-3">Building</th>
-                <th className="py-3 pr-6">Room</th>
+                <th className="py-3">Room</th>
+                {/*<th className="py-3 pr-6">Status</th>*/}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -887,12 +894,23 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                     <td className="py-3 pl-6 font-mono text-sm font-medium text-brand-700">{e.Equipment}</td>
                     <td className="py-3 text-sm text-slate-600 max-w-xs lg:max-w-md truncate">{e.EquipmentDesc || "N/A"}</td>
                     <td className="py-3 text-sm text-slate-600">{e.Location}</td>
-                    <td className="py-3 text-sm text-slate-600 pr-6">{e.Room || "-"}</td>
+                    <td className="py-3 text-sm text-slate-600">{e.Room || "-"}</td>
+                    {/*<td className="py-3 pr-6">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        e.status === 'OPERATING' ? 'bg-green-100 text-green-700' :
+                        e.status === 'REPAIR' ? 'bg-red-100 text-red-700' :
+                        e.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600' :
+                        e.status === 'ONSHELF' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        {e.status || 'UNKNOWN'}
+                      </span>
+                    </td>*/}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400">
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
                     {hasActiveFilters || searchTerm 
                       ? "No equipment matches the selected filters"
                       : "No equipment found"
@@ -920,11 +938,20 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 <div className="text-sm text-slate-600 mb-2 line-clamp-2">
                   {e.EquipmentDesc || "N/A"}
                 </div>
-                {e.Room && (
-                  <div className="text-xs text-slate-500">
-                    <span className="font-medium">Room:</span> {e.Room}
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <div>
+                    {e.Room && <><span className="font-medium">Room:</span> {e.Room}</>}
                   </div>
-                )}
+                  {/*<span className={`font-medium px-2 py-0.5 rounded-full ${
+                    e.status === 'OPERATING' ? 'bg-green-100 text-green-700' :
+                    e.status === 'REPAIR' ? 'bg-red-100 text-red-700' :
+                    e.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600' :
+                    e.status === 'ONSHELF' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-slate-100 text-slate-500'
+                  }`}>
+                    {e.status || 'UNKNOWN'}
+                  </span>*/}
+                </div>
               </div>
             ))
           ) : (
@@ -936,7 +963,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
             </div>
           )}
         </div>
-        
+
         {/* Show More / Pagination */}
         {hasMoreItems && (
           <div className="p-4 border-t border-slate-100 text-center">
@@ -957,7 +984,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       </div>
 
       {/* Add Equipment Modal */}
-      {isAddingEquipment && (
+      {canEdit && isAddingEquipment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 animate-fade-in my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">

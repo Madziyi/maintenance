@@ -7,11 +7,13 @@ import { useToast } from '../common/Toast';
 interface RoomListProps {
   data: BuildingData[];
   onSaveRoom: (room: MaintenanceRoom, buildingCode: string) => Promise<MaintenanceRoom | null>;
+  canEdit: boolean;
 }
 
 export const RoomList: React.FC<RoomListProps> = ({
   data,
-  onSaveRoom
+  onSaveRoom,
+  canEdit,
 }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -281,6 +283,7 @@ export const RoomList: React.FC<RoomListProps> = ({
 
   // Add Room handlers
   const handleCreateRoom = () => {
+    if (!canEdit) return;
     setIsAddingRoom(true);
     // Pre-select first building if available
     if (data.length > 0 && !newRoomBuilding) {
@@ -361,18 +364,20 @@ export const RoomList: React.FC<RoomListProps> = ({
             >
               <Download size={18} className="mr-2" /> Export
             </button>
-            <button 
-              onClick={handleCreateRoom} 
-              className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm"
-            >
-              <Plus size={18} className="mr-2" /> Add Room
-            </button>
+            {canEdit && (
+              <button 
+                onClick={handleCreateRoom} 
+                className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm"
+              >
+                <Plus size={18} className="mr-2" /> Add Room
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Add Room Modal */}
-      {isAddingRoom && (
+      {canEdit && isAddingRoom && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-fade-in">
             <div className="flex justify-between items-center mb-4">

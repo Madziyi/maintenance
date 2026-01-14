@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Building as BuildingIcon, MapPin, Wrench, Camera, Plus, X, Pencil, ExternalLink, Image as ImageIcon, Map, RefreshCw, ChevronRight, Trash2 } from 'lucide-react';
+import { ArrowLeft, Building as BuildingIcon, MapPin, Wrench, Camera, Plus, X, Pencil, ExternalLink, Image as ImageIcon, Map, RefreshCw, ChevronRight, Trash2, Share2 } from 'lucide-react';
 import { BuildingData, MaintenanceRoom } from '@/types';
 import { api } from '@/api';
 import { useToast } from '../common/Toast';
@@ -115,13 +115,15 @@ interface RoomDetailProps {
   onSaveRoom: (room: MaintenanceRoom, buildingCode: string) => Promise<MaintenanceRoom | null>;
   onSetFullScreenImage: (data: { imageUrl: string; markerX?: number; markerY?: number } | string | null) => void;
   onDeleteRoom: (roomId: string, buildingCode: string) => Promise<void>;
+  canEdit: boolean;
 }
 
 export const RoomDetail: React.FC<RoomDetailProps> = ({
   data,
   onSaveRoom,
   onSetFullScreenImage,
-  onDeleteRoom
+  onDeleteRoom,
+  canEdit,
 }) => {
   const { code, id } = useParams<{ code: string; id: string }>();
   const navigate = useNavigate();
@@ -164,6 +166,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
   }, [selectedRoom]);
   
   const handleSave = async () => {
+      if (!canEdit) return;
       setIsUploading(true);
       const savedRoom = await onSaveRoom(form, selectedBuilding.code);
       setIsUploading(false);
@@ -171,6 +174,28 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
       if (savedRoom && savedRoom.id !== form.id) {
           navigate(`/building/${selectedBuilding.code}/room/${savedRoom.id}`, { replace: true });
       }
+  };
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/building/${selectedBuilding.code}/room/${selectedRoom.id}`;
+    const title = `Room ${selectedRoom.RoomNumber} at ${selectedBuilding.name}`;
+    const text = selectedRoom.Description || 'Maintenance room details';
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        showToast('Room link copied to clipboard', 'success');
+      } else {
+        showToast('Sharing not supported in this browser', 'warning');
+      }
+    } catch (err: unknown) {
+      // Ignore aborts, show error for others
+      if ((err as Error)?.name !== 'AbortError') {
+        showToast('Failed to share room link', 'error');
+      }
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -288,7 +313,13 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                 <ArrowLeft size={20} className="mr-1" /> Back to {selectedBuilding.name}
             </button>
             <div className="flex space-x-2 self-end sm:self-auto">
-                {!isEditing && (
+                <button 
+                    onClick={handleShare} 
+                    className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium"
+                >
+                    <Share2 size={16} className="mr-2" /> Share
+                </button>
+                {canEdit && !isEditing && (
                     <button 
                         onClick={() => setIsEditing(true)} 
                         className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium"
@@ -424,7 +455,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                            <h3 className="font-bold text-slate-800 flex items-center">
                                <MapPin size={18} className="mr-2 text-brand-500"/> Floor Plan Location
                            </h3>
-                           {isEditing && (
+                           {isEditing && canEdit && (
                                <select 
                                     className="text-sm border rounded p-1"
                                     value={form.floorPlanId || ''}
@@ -504,7 +535,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                               </div>
                           ))}
                           
-                          {isEditing && (
+                          {isEditing && canEdit && (
                               <label className={`border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
                                   {isUploadingImage ? (
                                       <RefreshCw className="animate-spin text-slate-400"/>
@@ -530,7 +561,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
           </div>
           
           {/* Cancel, Save, and Delete buttons at bottom */}
-          {isEditing && (
+          {canEdit && isEditing && (
               <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-lg shadow-lg flex justify-between items-center">
                   <button 
                       onClick={async () => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2, Share2 } from 'lucide-react';
 import { BuildingData, Equipment, ViewState } from '../../../types';
 import { api } from '../../../api';
 import { useToast } from '@/src/components/common/Toast';
@@ -12,6 +12,7 @@ interface EquipmentDetailProps {
   onFindRoom: (equipment: Equipment) => void;
   onSetFullScreenImage: (url: string) => void;
   onDelete: () => Promise<void>;
+  canEdit: boolean;
 }
 
 export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
@@ -21,13 +22,14 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   onSave,
   onFindRoom,
   onSetFullScreenImage,
-  onDelete
+  onDelete,
+  canEdit,
 }) => {
   const { showToast } = useToast();
   if (!equipment) return null;
 
   const exists = data.some(b => b.equipment.some(e => e.id === equipment.id));
-  const [isEditing, setIsEditing] = useState(!exists);
+  const [isEditing, setIsEditing] = useState(!exists && canEdit);
   const [form, setForm] = useState(equipment);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
@@ -39,6 +41,27 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       setForm(prev => ({ ...prev, LocationDesc: b.name }));
     }
   }, [form.Location, data]);
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/equipment/${equipment.id}`;
+    const title = equipment.Equipment || 'Equipment';
+    const text = equipment.EquipmentDesc || 'Equipment details';
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        showToast('Equipment link copied to clipboard', 'success');
+      } else {
+        showToast('Sharing not supported in this browser', 'warning');
+      }
+    } catch (err: unknown) {
+      if ((err as Error)?.name !== 'AbortError') {
+        showToast('Failed to share equipment link', 'error');
+      }
+    }
+  };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -91,6 +114,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   };
 
   const saveChanges = async () => {
+    if (!canEdit) return;
     setIsUploading(true);
     await onSave(form);
     setIsUploading(false);
@@ -104,7 +128,13 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
           <ArrowLeft size={20} className="mr-1" /> Back to List
         </button>
         <div className="flex space-x-2 self-end sm:self-auto">
-          {!isEditing && (
+          <button
+            onClick={handleShare}
+            className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium"
+          >
+            <Share2 size={16} className="mr-2" /> Share
+          </button>
+          {canEdit && !isEditing && (
             <button onClick={() => setIsEditing(true)} className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium">
               <Pencil size={16} className="mr-2" /> Edit
             </button>
@@ -288,7 +318,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       </div>
       
       {/* Cancel, Save, and Delete buttons at bottom */}
-      {isEditing && (
+      {canEdit && isEditing && (
         <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-lg shadow-lg flex justify-between items-center">
           <button 
             onClick={async () => {

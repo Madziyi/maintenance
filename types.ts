@@ -35,6 +35,7 @@ export interface FloorPlan {
   id: string;
   name: string; // e.g., "Basement", "1st Floor"
   imageUrl: string;
+  slug?: string; // URL-friendly identifier for sharing (scoped per building)
 }
 
 export interface BuildingData {

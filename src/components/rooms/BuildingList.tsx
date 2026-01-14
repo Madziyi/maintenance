@@ -6,11 +6,13 @@ import { BuildingData } from '@/types';
 interface BuildingListProps {
   data: BuildingData[];
   onAddBuilding: (code: string, name: string) => void;
+  canEdit?: boolean;
 }
 
 export const BuildingList: React.FC<BuildingListProps> = ({
   data,
-  onAddBuilding
+  onAddBuilding,
+  canEdit = false,
 }) => {
   const navigate = useNavigate();
   const [isAddingBuilding, setIsAddingBuilding] = useState(false);
@@ -48,17 +50,19 @@ export const BuildingList: React.FC<BuildingListProps> = ({
                           className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
                       />
                   </div>
-                  <button 
-                      onClick={() => setIsAddingBuilding(!isAddingBuilding)} 
-                      className="bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap"
-                  >
-                      {isAddingBuilding ? <X size={18} className="mr-2"/> : <Plus size={18} className="mr-2"/>}
-                      {isAddingBuilding ? 'Cancel' : 'Add Building'}
-                  </button>
+                  {canEdit && (
+                    <button 
+                        onClick={() => setIsAddingBuilding(!isAddingBuilding)} 
+                        className="bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap"
+                    >
+                        {isAddingBuilding ? <X size={18} className="mr-2"/> : <Plus size={18} className="mr-2"/>}
+                        {isAddingBuilding ? 'Cancel' : 'Add Building'}
+                    </button>
+                  )}
               </div>
           </div>
 
-          {isAddingBuilding && (
+          {canEdit && isAddingBuilding && (
               <div className="bg-brand-50 border border-brand-100 p-6 rounded-xl animate-fade-in">
                   <h3 className="font-bold text-brand-800 mb-4">Add New Building</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">

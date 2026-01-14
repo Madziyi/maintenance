@@ -49,6 +49,7 @@ import { LoadingScreen } from './src/components/common/LoadingScreen';
 import { SidebarItem } from './src/components/common/SidebarItem';
 import { ScrollToTop } from './src/components/common/ScrollToTop';
 import { useToast } from './src/components/common/Toast';
+import * as Sentry from "@sentry/react";
 import { Dashboard } from './src/components/dashboard/Dashboard';
 import { EquipmentList } from './src/components/equipment/EquipmentList';
 import { EquipmentDetailRoute } from './src/components/equipment/EquipmentDetailRoute';
@@ -101,12 +102,22 @@ const App = () => {
     }
   }, []);
   
-  // Load data on mount (only if authenticated)
+  // Set user context for Sentry when authenticated
   useEffect(() => {
     if (isAuthenticated) {
-    fetchData();
+      Sentry.setUser({
+        // Don't include PII - just track that a user is authenticated
+        authenticated: true,
+      });
+    } else {
+      Sentry.setUser(null);
     }
   }, [isAuthenticated]);
+
+  // Load data on mount (regardless of authentication - read-only access allowed)
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -151,6 +162,10 @@ const App = () => {
   // -- Data Modification Helpers --
 
   const addBuilding = useCallback(async (code: string, name: string) => {
+      if (!isAuthenticated) {
+        showToast("Please log in to make changes.", "warning");
+        return;
+      }
       // For now, client side update until backend supports explicit CreateBuilding beyond Seed
       // Realistically, Seed handles this, or we adapt API to allow new building creation
       // Implementing local optimistic update + simple API push
@@ -176,9 +191,13 @@ const App = () => {
       } catch (e) {
         showToast("Failed to create building", 'error');
       }
-  }, [data, showToast]);
+  }, [data, isAuthenticated, showToast]);
 
   const saveEquipment = useCallback(async (eq: Equipment) => {
+    if (!isAuthenticated) {
+      showToast("Please log in to make changes.", "warning");
+      return;
+    }
     try {
         const savedEq = await api.saveEquipment(eq);
         
@@ -201,9 +220,13 @@ const App = () => {
     } catch (e) {
         showToast("Failed to save equipment", 'error');
     }
-  }, [showToast]);
+  }, [isAuthenticated, showToast]);
 
   const saveRoom = useCallback(async (room: MaintenanceRoom, targetBuildingCode: string): Promise<MaintenanceRoom | null> => {
+      if (!isAuthenticated) {
+        showToast("Please log in to make changes.", "warning");
+        return null;
+      }
       try {
         const savedRoom = await api.saveRoom(room);
         setData(prevData => {
@@ -225,9 +248,13 @@ const App = () => {
             showToast("Failed to save room", 'error');
             return null;
           }
-  }, [showToast]);
+  }, [isAuthenticated, showToast]);
 
   const deleteEquipment = useCallback(async (equipmentId: string) => {
+      if (!isAuthenticated) {
+          showToast("Please log in to make changes.", "warning");
+          return;
+      }
       if (!window.confirm("Are you sure you want to delete this equipment? This action cannot be undone.")) {
           return;
       }
@@ -245,9 +272,13 @@ const App = () => {
       } catch (e) {
           showToast("Failed to delete equipment", 'error');
       }
-  }, [navigate, showToast]);
+  }, [isAuthenticated, navigate, showToast]);
 
   const deleteRoom = useCallback(async (roomId: string, buildingCode: string) => {
+      if (!isAuthenticated) {
+          showToast("Please log in to make changes.", "warning");
+          return;
+      }
       if (!window.confirm("Are you sure you want to delete this room? This action cannot be undone.")) {
           return;
       }
@@ -266,9 +297,13 @@ const App = () => {
           } catch (e) {
               showToast("Failed to delete room", 'error');
           }
-  }, [navigate, showToast]);
+  }, [isAuthenticated, navigate, showToast]);
 
   const updateFloorPlans = useCallback(async (buildingCode: string, plans: FloorPlan[], newPlan?: FloorPlan) => {
+    if (!isAuthenticated) {
+      showToast("Please log in to make changes.", "warning");
+      return;
+    }
     try {
         if (newPlan) {
             await api.saveFloorPlan(buildingCode, newPlan);
@@ -287,9 +322,13 @@ const App = () => {
         } catch (e) {
             showToast("Failed to update floor plans", 'error');
         }
-  }, [showToast]);
+  }, [isAuthenticated, showToast]);
   
   const deleteFloorPlan = useCallback(async (buildingCode: string, planId: string) => {
+      if (!isAuthenticated) {
+          showToast("Please log in to make changes.", "warning");
+          return;
+      }
       try {
           await api.deleteFloorPlan(planId);
           setData(prevData => {
@@ -304,9 +343,13 @@ const App = () => {
           } catch (e) {
               showToast("Failed to delete floor plan", 'error');
           }
-  }, [showToast]);
+  }, [isAuthenticated, showToast]);
 
   const updateBuilding = useCallback(async (buildingCode: string, updates: Partial<BuildingData>) => {
+    if (!isAuthenticated) {
+      showToast("Please log in to make changes.", "warning");
+      return;
+    }
     try {
         // Filter out undefined values before sending to API
         const sanitizedUpdates = Object.fromEntries(
@@ -326,18 +369,8 @@ const App = () => {
         } catch (e) {
             showToast("Failed to update building", 'error');
         }
-  }, [showToast]);
-
-  // Login Component
-  // Show login screen if not authenticated
-  if (!isAuthenticated) {
-    return <LoginScreen 
-      onLogin={() => setIsAuthenticated(true)}
-      staticUsername={STATIC_USERNAME}
-      staticPassword={STATIC_PASSWORD}
-    />;
-  }
-
+  }, [isAuthenticated, showToast]);
+  
   if (loading && data.length === 0) return <LoadingScreen />;
 
   return (
@@ -405,7 +438,31 @@ const App = () => {
         <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
           <ScrollToTop />
           <Routes>
-            <Route path="/" element={<Dashboard data={data} />} />
+            <Route
+              path="/login"
+              element={
+                <LoginScreen
+                  onLogin={() => {
+                    setIsAuthenticated(true);
+                    navigate("/");
+                  }}
+                  staticUsername={STATIC_USERNAME}
+                  staticPassword={STATIC_PASSWORD}
+                />
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <Dashboard
+                  data={data}
+                  isAuthenticated={isAuthenticated}
+                  onLoginClick={() => navigate("/login")}
+                  onViewEquipment={() => navigate("/equipment")}
+                  onViewBuildings={() => navigate("/building")}
+                />
+              }
+            />
             <Route path="/equipment" element={
               <EquipmentList 
                 data={data}
@@ -415,6 +472,7 @@ const App = () => {
                   navigate('/equipment');
                 }}
                 onSaveEquipment={saveEquipment}
+                canEdit={isAuthenticated}
               />
             } />
             <Route path="/equipment/:id" element={
@@ -424,12 +482,14 @@ const App = () => {
                 onFindRoom={findMaintenanceRoom}
                 onSetFullScreenImage={handleSetFullScreenImage}
                 onDelete={deleteEquipment}
+                canEdit={isAuthenticated}
               />
             } />
             <Route path="/building" element={
               <BuildingList 
                 data={data}
                 onAddBuilding={addBuilding}
+                canEdit={isAuthenticated}
               />
             } />
             <Route path="/building/:code" element={
@@ -438,6 +498,7 @@ const App = () => {
                 onUpdateBuilding={updateBuilding}
                 onSetFullScreenImage={handleSetFullScreenImage}
                 onSaveRoom={saveRoom}
+                canEdit={isAuthenticated}
               />
             } />
             <Route path="/building/:code/room/:id" element={
@@ -446,20 +507,23 @@ const App = () => {
                 onSaveRoom={saveRoom}
                 onSetFullScreenImage={handleSetFullScreenImage}
                 onDeleteRoom={deleteRoom}
+                canEdit={isAuthenticated}
               />
             } />
-            <Route path="/building/:code/floor-plans" element={
+            <Route path="/building/:code/floor-plans/:planSlug?" element={
               <FloorPlanManager 
                 data={data}
                 onUpdateFloorPlans={updateFloorPlans}
                 onDeleteFloorPlan={deleteFloorPlan}
                 onSetFullScreenImage={handleSetFullScreenImage}
+                canEdit={isAuthenticated}
               />
             } />
             <Route path="/rooms" element={
               <RoomList 
                 data={data}
                 onSaveRoom={saveRoom}
+                canEdit={isAuthenticated}
               />
             } />
           </Routes>

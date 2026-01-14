@@ -1,13 +1,23 @@
 import React, { useMemo } from 'react';
-import { Building as BuildingIcon, Wrench, MapPin, Image as ImageIcon } from 'lucide-react';
+import { Building as BuildingIcon, Wrench, MapPin, Image as ImageIcon, LogIn } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { BuildingData } from '../../../types';
 
 interface DashboardProps {
   data: BuildingData[];
+  isAuthenticated: boolean;
+  onLoginClick: () => void;
+  onViewEquipment: () => void;
+  onViewBuildings: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
+export const Dashboard: React.FC<DashboardProps> = ({
+  data,
+  isAuthenticated,
+  onLoginClick,
+  onViewEquipment,
+  onViewBuildings,
+}) => {
   const totalEquipment = useMemo(() => 
     data.reduce((acc, b) => acc + b.equipment.length, 0), 
     [data]
@@ -36,6 +46,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Facility Overview</h1>
           <p className="text-slate-500">Welcome to WayFinder Dashboard</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {!isAuthenticated && (
+            <button
+              onClick={onLoginClick}
+              className="px-4 py-2 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 transition-colors flex items-center gap-2"
+            >
+              <LogIn size={16} />
+              <span>Log In</span>
+            </button>
+          )}
+          <button
+            onClick={onViewEquipment}
+            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+          >
+            View Equipment
+          </button>
+          <button
+            onClick={onViewBuildings}
+            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+          >
+            View Buildings
+          </button>
         </div>
       </header>
       
