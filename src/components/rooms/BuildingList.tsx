@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Plus, X } from 'lucide-react';
 import { BuildingData } from '@/types';
+import { fuzzyMatch } from '@/src/utils/fuzzySearch';
 
 interface BuildingListProps {
   data: BuildingData[];
@@ -23,7 +24,12 @@ export const BuildingList: React.FC<BuildingListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   const filtered = useMemo(() => 
-    data.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    data.filter(b => fuzzyMatch(
+      b,
+      searchTerm,
+      ['name', 'code'],
+      { threshold: 0.4 } // Balanced: allows ~60% similarity
+    )),
     [data, searchTerm]
   );
   

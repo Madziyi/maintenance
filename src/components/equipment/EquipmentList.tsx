@@ -4,6 +4,7 @@ import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileT
 import { BuildingData, Equipment } from '../../../types';
 import { api } from '../../../api';
 import { useToast } from '@/src/components/common/Toast';
+import { fuzzyMatch } from '@/src/utils/fuzzySearch';
 
 interface EquipmentListProps {
   data: BuildingData[];
@@ -101,6 +102,8 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const descriptionDropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -207,11 +210,13 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   // Filtered equipment
   const filtered = useMemo(() => {
     return allEquipment.filter(e => {
-      // Search filter (existing logic)
-      const searchMatch = !searchTerm || 
-        e.Equipment.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        e.EquipmentDesc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        e.AssetTag.toLowerCase().includes(searchTerm.toLowerCase());
+      // Fuzzy search filter (handles typos and similar words)
+      const searchMatch = fuzzyMatch(
+        e,
+        searchTerm,
+        ['Equipment', 'EquipmentDesc', 'AssetTag'],
+        { threshold: 0.4 } // Balanced: allows ~60% similarity
+      );
       
       // Location filter
       const locationMatch = selectedLocations.length === 0 || 
@@ -373,6 +378,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     
     const files: File[] = Array.from(e.target.files);
     const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
+    const inputElement = e.target;
     
     // Mark all as uploading
     setUploadingImageIds(new Set(tempIds));
@@ -401,14 +407,22 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       });
       
       const urls = await Promise.all(uploadPromises);
+      // Use functional update to ensure we have the latest state
       setNewEquipmentImages(prev => [...prev, ...urls]);
     } catch (err) {
       showToast("Failed to upload some images. Please try again.", 'error');
     } finally {
       setIsUploadingImages(false);
       setUploadingImageIds(new Set());
-      // Reset file input
-      e.target.value = '';
+      // Reset the input that was used
+      inputElement.value = '';
+      // Also reset the other input if it exists
+      if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
+        uploadInputRef.current.value = '';
+      }
+      if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
+        cameraInputRef.current.value = '';
+      }
     }
   };
 
@@ -1239,6 +1253,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                       </>
                     )}
                     <input 
+                      ref={uploadInputRef}
                       type="file" 
                       className="hidden" 
                       accept="image/*" 
@@ -1260,6 +1275,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                       </>
                     )}
                     <input 
+                      ref={cameraInputRef}
                       type="file" 
                       className="hidden" 
                       accept="image/*" 

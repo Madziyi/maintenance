@@ -158,12 +158,15 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
-      if (selectedRoom) {
+      // Only reset form if we're not editing and the room ID actually changed
+      if (selectedRoom && !isEditing && selectedRoom.id !== form.id) {
           setForm(selectedRoom);
       }
-  }, [selectedRoom]);
+  }, [selectedRoom?.id, isEditing]);
   
   const handleSave = async () => {
       if (!canEdit) return;
@@ -203,6 +206,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
       
       const files = Array.from(e.target.files) as File[];
       const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
+      const inputElement = e.target;
       
       setUploadingImageIds(new Set(tempIds));
       setIsUploadingImage(true);
@@ -229,15 +233,26 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
           });
           
           const urls = await Promise.all(uploadPromises);
-          const currentImages = form.roomImages || [];
-          setForm({...form, roomImages: [...currentImages, ...urls]});
+          // Use functional update to ensure we have the latest form state
+          setForm(prevForm => ({
+              ...prevForm,
+              roomImages: [...(prevForm.roomImages || []), ...urls]
+          }));
           showToast("Images uploaded successfully", 'success');
       } catch (err) {
           showToast("Failed to upload some images. Please try again.", 'error');
       } finally {
           setIsUploadingImage(false);
           setUploadingImageIds(new Set());
-          e.target.value = '';
+          // Reset the input that was used
+          inputElement.value = '';
+          // Also reset the other input if it exists
+          if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
+              uploadInputRef.current.value = '';
+          }
+          if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
+              cameraInputRef.current.value = '';
+          }
       }
   };
 
@@ -547,6 +562,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                           {isUploadingImage ? 'Uploading...' : 'Upload Photo'}
                                       </span>
                                       <input 
+                                          ref={uploadInputRef}
                                           type="file" 
                                           className="hidden" 
                                           accept="image/*" 
@@ -565,6 +581,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                           {isUploadingImage ? 'Uploading...' : 'Take Photo'}
                                       </span>
                                       <input 
+                                          ref={cameraInputRef}
                                           type="file" 
                                           className="hidden" 
                                           accept="image/*" 

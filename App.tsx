@@ -498,6 +498,7 @@ const App = () => {
                 onUpdateBuilding={updateBuilding}
                 onSetFullScreenImage={handleSetFullScreenImage}
                 onSaveRoom={saveRoom}
+                onSaveEquipment={saveEquipment}
                 canEdit={isAuthenticated}
               />
             } />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2, Share2, Upload } from 'lucide-react';
 import { BuildingData, Equipment, ViewState } from '../../../types';
 import { api } from '../../../api';
@@ -34,6 +34,8 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const b = data.find(b => b.code === form.Location);
@@ -68,6 +70,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
     
     const files = Array.from(e.target.files) as File[];
     const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
+    const inputElement = e.target;
     
     // Mark all as uploading
     setUploadingImageIds(new Set(tempIds));
@@ -95,16 +98,26 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       });
       
       const urls = await Promise.all(uploadPromises);
-      const updated = { ...form, images: [...(form.images || []), ...urls] };
-      setForm(updated);
+      // Use functional update to ensure we have the latest form state
+      setForm(prevForm => ({
+        ...prevForm,
+        images: [...(prevForm.images || []), ...urls]
+      }));
       showToast("Images uploaded successfully", 'success');
     } catch (err) {
       showToast("Failed to upload some images. Please try again.", 'error');
     } finally {
       setIsUploading(false);
       setUploadingImageIds(new Set());
-      // Reset file input
-      e.target.value = '';
+      // Reset the input that was used
+      inputElement.value = '';
+      // Also reset the other input if it exists
+      if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
+        uploadInputRef.current.value = '';
+      }
+      if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
+        cameraInputRef.current.value = '';
+      }
     }
   };
 
@@ -299,6 +312,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                       </>
                     )}
                     <input 
+                      ref={uploadInputRef}
                       type="file" 
                       className="hidden" 
                       accept="image/*" 
@@ -320,6 +334,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                       </>
                     )}
                     <input 
+                      ref={cameraInputRef}
                       type="file" 
                       className="hidden" 
                       accept="image/*" 

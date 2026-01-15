@@ -3,6 +3,7 @@ import { Search, ChevronDown, Building, Layers, FileText, X, Plus, Download } fr
 import { useNavigate } from 'react-router-dom';
 import { BuildingData, MaintenanceRoom } from '@/types';
 import { useToast } from '../common/Toast';
+import { fuzzyMatch } from '@/src/utils/fuzzySearch';
 
 interface RoomListProps {
   data: BuildingData[];
@@ -175,11 +176,13 @@ export const RoomList: React.FC<RoomListProps> = ({
   // Filtered rooms
   const filtered = useMemo(() => {
     return allRooms.filter(room => {
-      // Search filter
-      const searchMatch = !searchTerm || 
-        room.RoomNumber.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        room.Description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        room.Building.toLowerCase().includes(searchTerm.toLowerCase());
+      // Fuzzy search filter (handles typos and similar words)
+      const searchMatch = fuzzyMatch(
+        room,
+        searchTerm,
+        ['RoomNumber', 'Description', 'Building'],
+        { threshold: 0.4 } // Balanced: allows ~60% similarity
+      );
       
       // Location filter
       const locationMatch = selectedLocations.length === 0 || 

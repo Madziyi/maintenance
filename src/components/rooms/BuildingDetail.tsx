@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2, Wrench, Layers, FileText, Info, ChevronDown, Upload } from 'lucide-react';
-import { BuildingData } from '@/types';
+import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2, Wrench, Layers, FileText, Info, ChevronDown, Upload, Copy } from 'lucide-react';
+import { BuildingData, Equipment } from '@/types';
 import { MaintenanceRoom } from '@/types';
 import { api } from '@/api';
 import { useToast } from '../common/Toast';
@@ -11,6 +11,7 @@ interface BuildingDetailProps {
   onUpdateBuilding: (buildingCode: string, updates: Partial<BuildingData>) => Promise<void>;
   onSetFullScreenImage: (url: string | null) => void;
   onSaveRoom: (room: MaintenanceRoom, buildingCode: string) => Promise<MaintenanceRoom | null>;
+  onSaveEquipment: (equipment: Equipment) => Promise<void>;
   canEdit: boolean;
 }
 
@@ -19,6 +20,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   onUpdateBuilding,
   onSetFullScreenImage,
   onSaveRoom,
+  onSaveEquipment,
   canEdit,
 }) => {
   const { code } = useParams<{ code: string }>();
@@ -35,6 +37,23 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingBuildingImage, setIsUploadingBuildingImage] = useState(false);
+  
+  // Equipment form state
+  const [isAddingEquipment, setIsAddingEquipment] = useState(false);
+  const [newEquipmentName, setNewEquipmentName] = useState('');
+  const [newEquipmentDesc, setNewEquipmentDesc] = useState('');
+  const [newEquipmentRoom, setNewEquipmentRoom] = useState('');
+  const [newEquipmentManufacturer, setNewEquipmentManufacturer] = useState('');
+  const [newEquipmentVendor, setNewEquipmentVendor] = useState('');
+  const [newEquipmentSerialNum, setNewEquipmentSerialNum] = useState('');
+  const [newEquipmentNotes, setNewEquipmentNotes] = useState('');
+  const [newEquipmentStatus, setNewEquipmentStatus] = useState<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'>('UNKNOWN');
+  const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
+  const [isSavingEquipment, setIsSavingEquipment] = useState(false);
+  const [isUploadingEquipmentImages, setIsUploadingEquipmentImages] = useState(false);
+  const [uploadingEquipmentImageIds, setUploadingEquipmentImageIds] = useState<Set<string>>(new Set());
+  const equipmentUploadInputRef = useRef<HTMLInputElement>(null);
+  const equipmentCameraInputRef = useRef<HTMLInputElement>(null);
   
   // Room filter state
   const [showFloorFilter, setShowFloorFilter] = useState(false);
@@ -218,6 +237,34 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       setIsAddingRoom(true);
   };
 
+  const handleCreateEquipment = (equipmentToDuplicate?: Equipment) => {
+      if (!canEdit) return;
+      if (equipmentToDuplicate) {
+          // Pre-fill form with equipment data (excluding images)
+          setNewEquipmentName(equipmentToDuplicate.Equipment || '');
+          setNewEquipmentDesc(equipmentToDuplicate.EquipmentDesc || '');
+          setNewEquipmentRoom(equipmentToDuplicate.Room || '');
+          setNewEquipmentManufacturer(equipmentToDuplicate.Manufacturer || '');
+          setNewEquipmentVendor(equipmentToDuplicate.Vendor || '');
+          setNewEquipmentSerialNum(equipmentToDuplicate.SerialNum || '');
+          setNewEquipmentNotes(equipmentToDuplicate.Notes || '');
+          setNewEquipmentStatus(equipmentToDuplicate.status || 'UNKNOWN');
+          setNewEquipmentImages([]); // Don't copy images
+      } else {
+          // Reset form for new equipment
+          setNewEquipmentName('');
+          setNewEquipmentDesc('');
+          setNewEquipmentRoom('');
+          setNewEquipmentManufacturer('');
+          setNewEquipmentVendor('');
+          setNewEquipmentSerialNum('');
+          setNewEquipmentNotes('');
+          setNewEquipmentStatus('UNKNOWN');
+          setNewEquipmentImages([]);
+      }
+      setIsAddingEquipment(true);
+  };
+
   const handleShareBuilding = async () => {
       if (!selectedBuilding) return;
 
@@ -283,6 +330,137 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       setNewRoomDescription('');
   };
 
+  const handleSaveNewEquipment = async () => {
+      if (!newEquipmentName.trim()) {
+          showToast("Equipment name is required", 'warning');
+          return;
+      }
+      
+      setIsSavingEquipment(true);
+      try {
+          const newEq: Equipment = {
+              id: `EQ-NEW-${Date.now()}`,
+              Equipment: newEquipmentName.trim(),
+              EquipmentDesc: newEquipmentDesc.trim(),
+              Notes: newEquipmentNotes.trim(),
+              Location: selectedBuilding.code,
+              LocationDesc: selectedBuilding.name,
+              Room: newEquipmentRoom || '',
+              KeyAccess: '',
+              AssetTag: '',
+              SerialNum: newEquipmentSerialNum.trim(),
+              Manufacturer: newEquipmentManufacturer.trim(),
+              Model: '',
+              Vendor: newEquipmentVendor.trim(),
+              PurchaseDate: '',
+              WarrantyDate: '',
+              images: newEquipmentImages,
+              status: newEquipmentStatus
+          };
+          
+          await onSaveEquipment(newEq);
+          
+          // Reset form and stay on building detail page
+          setIsAddingEquipment(false);
+          setNewEquipmentName('');
+          setNewEquipmentDesc('');
+          setNewEquipmentRoom('');
+          setNewEquipmentManufacturer('');
+          setNewEquipmentVendor('');
+          setNewEquipmentSerialNum('');
+          setNewEquipmentNotes('');
+          setNewEquipmentStatus('UNKNOWN');
+          setNewEquipmentImages([]);
+          setUploadingEquipmentImageIds(new Set());
+          showToast("Equipment created successfully", 'success');
+      } catch (error) {
+          showToast("Failed to create equipment. Please try again.", 'error');
+      } finally {
+          setIsSavingEquipment(false);
+      }
+  };
+
+  const handleCancelAddEquipment = async () => {
+      // Delete any uploaded images that weren't saved
+      if (newEquipmentImages.length > 0) {
+          try {
+              await Promise.all(newEquipmentImages.map(img => api.deleteImage(img)));
+          } catch (err) {
+              console.error('Failed to delete unsaved images:', err);
+          }
+      }
+      
+      setIsAddingEquipment(false);
+      setNewEquipmentName('');
+      setNewEquipmentDesc('');
+      setNewEquipmentRoom('');
+      setNewEquipmentManufacturer('');
+      setNewEquipmentVendor('');
+      setNewEquipmentSerialNum('');
+      setNewEquipmentNotes('');
+      setNewEquipmentStatus('UNKNOWN');
+      setNewEquipmentImages([]);
+      setUploadingEquipmentImageIds(new Set());
+  };
+
+  const handleEquipmentPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || e.target.files.length === 0) return;
+      
+      const files: File[] = Array.from(e.target.files);
+      const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
+      const inputElement = e.target;
+      
+      setUploadingEquipmentImageIds(new Set(tempIds));
+      setIsUploadingEquipmentImages(true);
+      
+      try {
+          const uploadPromises = files.map(async (file, idx) => {
+              const tempId = tempIds[idx];
+              try {
+                  const url = await api.uploadFile(file);
+                  setUploadingEquipmentImageIds(prev => {
+                      const next = new Set(prev);
+                      next.delete(tempId);
+                      return next;
+                  });
+                  return url;
+              } catch (err) {
+                  setUploadingEquipmentImageIds(prev => {
+                      const next = new Set(prev);
+                      next.delete(tempId);
+                      return next;
+                  });
+                  throw err;
+              }
+          });
+          
+          const urls = await Promise.all(uploadPromises);
+          setNewEquipmentImages(prev => [...prev, ...urls]);
+      } catch (err) {
+          showToast("Failed to upload some images. Please try again.", 'error');
+      } finally {
+          setIsUploadingEquipmentImages(false);
+          setUploadingEquipmentImageIds(new Set());
+          inputElement.value = '';
+          if (equipmentUploadInputRef.current && inputElement !== equipmentUploadInputRef.current) {
+              equipmentUploadInputRef.current.value = '';
+          }
+          if (equipmentCameraInputRef.current && inputElement !== equipmentCameraInputRef.current) {
+              equipmentCameraInputRef.current.value = '';
+          }
+      }
+  };
+
+  const handleEquipmentPhotoDelete = async (imageUrl: string) => {
+      try {
+          await api.deleteImage(imageUrl);
+          setNewEquipmentImages(prev => prev.filter(img => img !== imageUrl));
+          showToast("Image deleted successfully", 'success');
+      } catch (err) {
+          showToast("Failed to delete image", 'error');
+      }
+  };
+
   const handleBuildingImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           setIsUploadingBuildingImage(true);
@@ -316,12 +494,20 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
               </div>
               <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto">
                   {canEdit && (
-                    <button 
-                        onClick={handleCreateRoom} 
-                        className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 shadow-sm"
-                    >
-                        <Plus size={18} className="mr-2" /> Add Room
-                    </button>
+                    <>
+                      <button 
+                          onClick={handleCreateRoom} 
+                          className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 shadow-sm"
+                      >
+                          <Plus size={18} className="mr-2" /> Add Room
+                      </button>
+                      <button 
+                          onClick={handleCreateEquipment} 
+                          className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 shadow-sm"
+                      >
+                          <Wrench size={18} className="mr-2" /> Add Equipment
+                      </button>
+                    </>
                   )}
                   <button
                       onClick={handleShareBuilding}
@@ -417,6 +603,264 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               className="px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                               {isSaving ? 'Creating...' : 'Create Room'}
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* Add Equipment Modal */}
+          {canEdit && isAddingEquipment && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 animate-fade-in max-h-[90vh] overflow-y-auto">
+                      <div className="flex justify-between items-center mb-4">
+                          <h2 className="text-xl font-bold text-slate-800">
+                              {newEquipmentName ? 'Duplicate Equipment' : 'Add New Equipment'}
+                          </h2>
+                          <button 
+                              onClick={handleCancelAddEquipment}
+                              className="text-slate-400 hover:text-slate-600 transition-colors"
+                          >
+                              <X size={20} />
+                          </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <div>
+                              <label className="block text-sm font-bold text-slate-600 mb-1">
+                                  Equipment Name <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                  type="text"
+                                  value={newEquipmentName}
+                                  onChange={(e) => setNewEquipmentName(e.target.value)}
+                                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  placeholder="e.g. HVAC Unit, Generator"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && newEquipmentName.trim()) {
+                                          handleSaveNewEquipment();
+                                      }
+                                  }}
+                              />
+                          </div>
+                          
+                          <div>
+                              <label className="block text-sm font-bold text-slate-600 mb-1">
+                                  Description
+                              </label>
+                              <input
+                                  type="text"
+                                  value={newEquipmentDesc}
+                                  onChange={(e) => setNewEquipmentDesc(e.target.value)}
+                                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  placeholder="Brief description of the equipment"
+                                  onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && newEquipmentName.trim()) {
+                                          handleSaveNewEquipment();
+                                      }
+                                  }}
+                              />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                                      Room
+                                  </label>
+                                  <select
+                                      value={newEquipmentRoom}
+                                      onChange={(e) => setNewEquipmentRoom(e.target.value)}
+                                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  >
+                                      <option value="">Select a room...</option>
+                                      {selectedBuilding.maintenanceRooms.map(room => (
+                                          <option key={room.id} value={room.RoomNumber}>
+                                              {room.RoomNumber} {room.Description ? `- ${room.Description}` : ''}
+                                          </option>
+                                      ))}
+                                  </select>
+                              </div>
+
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                                      Status
+                                  </label>
+                                  <select
+                                      value={newEquipmentStatus}
+                                      onChange={(e) => setNewEquipmentStatus(e.target.value as typeof newEquipmentStatus)}
+                                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  >
+                                      <option value="UNKNOWN">Unknown</option>
+                                      <option value="OPERATING">Operating</option>
+                                      <option value="REPAIR">Repair</option>
+                                      <option value="INACTIVE">Inactive</option>
+                                      <option value="ONSHELF">On Shelf</option>
+                                  </select>
+                              </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                                      Manufacturer
+                                  </label>
+                                  <input
+                                      type="text"
+                                      value={newEquipmentManufacturer}
+                                      onChange={(e) => setNewEquipmentManufacturer(e.target.value)}
+                                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                      placeholder="e.g. Carrier, Trane"
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="block text-sm font-bold text-slate-600 mb-1">
+                                      Serial Number
+                                  </label>
+                                  <input
+                                      type="text"
+                                      value={newEquipmentSerialNum}
+                                      onChange={(e) => setNewEquipmentSerialNum(e.target.value)}
+                                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                      placeholder="Serial number"
+                                  />
+                              </div>
+                          </div>
+
+                          <div>
+                              <label className="block text-sm font-bold text-slate-600 mb-1">
+                                  Vendor
+                              </label>
+                              <input
+                                  type="text"
+                                  value={newEquipmentVendor}
+                                  onChange={(e) => setNewEquipmentVendor(e.target.value)}
+                                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  placeholder="Vendor name"
+                              />
+                          </div>
+
+                          <div>
+                              <label className="block text-sm font-bold text-slate-600 mb-1">
+                                  Notes
+                              </label>
+                              <textarea
+                                  value={newEquipmentNotes}
+                                  onChange={(e) => setNewEquipmentNotes(e.target.value)}
+                                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  placeholder="Additional notes..."
+                                  rows={3}
+                              />
+                          </div>
+
+                          {/* Photo Upload Section */}
+                          <div>
+                              <label className="block text-sm font-bold text-slate-600 mb-2">
+                                  Photos
+                              </label>
+                              
+                              {/* Photo Grid */}
+                              {newEquipmentImages.length > 0 && (
+                                  <div className="grid grid-cols-3 gap-2 mb-3">
+                                      {newEquipmentImages.map((img, idx) => (
+                                          <div key={idx} className="relative rounded-lg overflow-hidden aspect-square border border-slate-200 group">
+                                              <img src={img} className="w-full h-full object-cover" alt={`Upload ${idx + 1}`} />
+                                              <button
+                                                  onClick={() => handleEquipmentPhotoDelete(img)}
+                                                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                              >
+                                                  <X size={12} />
+                                              </button>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+                              
+                              {/* Uploading Placeholders */}
+                              {uploadingEquipmentImageIds.size > 0 && (
+                                  <div className="grid grid-cols-3 gap-2 mb-3">
+                                      {Array.from(uploadingEquipmentImageIds).map((tempId) => (
+                                          <div key={tempId} className="relative rounded-lg overflow-hidden aspect-square border-2 border-dashed border-brand-300 bg-brand-50 flex items-center justify-center">
+                                              <div className="w-full h-full flex flex-col items-center justify-center p-2">
+                                                  <RefreshCw className="animate-spin text-brand-600 mb-2" size={20} />
+                                                  <div className="w-full px-2">
+                                                      <div className="w-full bg-brand-200 rounded-full h-1.5">
+                                                          <div className="bg-brand-600 h-1.5 rounded-full animate-pulse" style={{ width: '100%' }}></div>
+                                                      </div>
+                                                  </div>
+                                                  <span className="text-xs text-brand-600 mt-1">Uploading...</span>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+                              
+                              {/* Upload Buttons */}
+                              <div className="flex gap-2">
+                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingEquipmentImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                                      {isUploadingEquipmentImages ? (
+                                          <>
+                                              <RefreshCw className="animate-spin text-slate-400" size={24} />
+                                              <span className="text-sm text-slate-500 mt-2">Uploading...</span>
+                                          </>
+                                      ) : (
+                                          <>
+                                              <Upload size={24} className="text-slate-400" />
+                                              <span className="text-sm text-slate-500 mt-2">Upload Photo</span>
+                                          </>
+                                      )}
+                                      <input 
+                                          ref={equipmentUploadInputRef}
+                                          type="file" 
+                                          className="hidden" 
+                                          accept="image/*" 
+                                          multiple
+                                          onChange={handleEquipmentPhotoUpload}
+                                          disabled={isUploadingEquipmentImages}
+                                      />
+                                  </label>
+                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingEquipmentImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                                      {isUploadingEquipmentImages ? (
+                                          <>
+                                              <RefreshCw className="animate-spin text-slate-400" size={24} />
+                                              <span className="text-sm text-slate-500 mt-2">Uploading...</span>
+                                          </>
+                                      ) : (
+                                          <>
+                                              <Camera size={24} className="text-slate-400" />
+                                              <span className="text-sm text-slate-500 mt-2">Take Photo</span>
+                                          </>
+                                      )}
+                                      <input 
+                                          ref={equipmentCameraInputRef}
+                                          type="file" 
+                                          className="hidden" 
+                                          accept="image/*" 
+                                          capture="environment"
+                                          multiple
+                                          onChange={handleEquipmentPhotoUpload}
+                                          disabled={isUploadingEquipmentImages}
+                                      />
+                                  </label>
+                              </div>
+                          </div>
+                      </div>
+                      
+                      <div className="flex justify-end gap-3 mt-6">
+                          <button
+                              onClick={handleCancelAddEquipment}
+                              disabled={isSavingEquipment}
+                              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium disabled:opacity-50"
+                          >
+                              Cancel
+                          </button>
+                          <button
+                              onClick={handleSaveNewEquipment}
+                              disabled={isSavingEquipment || !newEquipmentName.trim()}
+                              className="px-4 py-2 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                              {isSavingEquipment ? 'Creating...' : 'Create Equipment'}
                           </button>
                       </div>
                   </div>
@@ -941,6 +1385,18 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       onClick={() => navigate(`/equipment/${eq.id}`)}
                                   >
                                       <td className="p-4 font-bold text-slate-700 flex items-center">
+                                          {canEdit && (
+                                              <button
+                                                  onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleCreateEquipment(eq);
+                                                  }}
+                                                  className="mr-2 p-1.5 rounded hover:bg-brand-100 text-slate-400 hover:text-brand-600 transition-colors"
+                                                  title="Duplicate equipment"
+                                              >
+                                                  <Copy size={14} />
+                                              </button>
+                                          )}
                                           <ChevronRight size={16} className="text-slate-300 mr-2 group-hover:text-brand-600 transition-colors" />
                                           {eq.Equipment}
                                       </td>
