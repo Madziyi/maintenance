@@ -136,27 +136,27 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
 
   return (
     <div key={equipment.id} className="max-w-5xl mx-auto space-y-6 pb-20 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
-        <button onClick={onBack} className="flex items-center text-slate-500 hover:text-brand-600 transition-colors font-medium">
-          <ArrowLeft size={20} className="mr-1" /> Back to List
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <button onClick={onBack} className="flex items-center text-slate-500 hover:text-brand-600 transition-colors font-medium text-sm">
+          <ArrowLeft size={18} className="mr-1.5" /> Back to List
         </button>
         <div className="flex space-x-2 self-end sm:self-auto">
           <button
             onClick={handleShare}
-            className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium"
+            className="flex items-center px-4 py-2 h-9 rounded-md bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-slate-300 transition-colors"
           >
             <Share2 size={16} className="mr-2" /> Share
           </button>
           {canEdit && !isEditing && (
-            <button onClick={() => setIsEditing(true)} className="flex items-center px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium">
+            <button onClick={() => setIsEditing(true)} className="flex items-center px-4 py-2 h-9 rounded-md bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-slate-300 transition-colors">
               <Pencil size={16} className="mr-2" /> Edit
             </button>
           )}
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-100">
-        <div className="p-6 md:p-8 bg-gradient-to-r from-brand-900 to-brand-700 text-white">
+      <div className="bg-white rounded-lg overflow-hidden border border-slate-200">
+        <div className="p-6 md:p-8 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
           {isEditing ? (
             <div className="space-y-4">
               <input value={form.Equipment} onChange={e => setForm({...form, Equipment: e.target.value})} className="text-2xl md:text-3xl font-bold bg-white/10 p-2 rounded w-full border border-white/20 text-white placeholder-white/50" placeholder="Equipment Name"/>
@@ -164,8 +164,8 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
             </div>
           ) : (
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold break-all">{equipment.Equipment}</h1>
-              <p className="text-brand-100 mt-2 text-base md:text-lg">{equipment.EquipmentDesc}</p>
+              <h1 className="text-2xl md:text-3xl font-semibold break-all">{equipment.Equipment}</h1>
+              <p className="text-slate-300 mt-2 text-base md:text-lg">{equipment.EquipmentDesc}</p>
             </div>
           )}
         </div>
@@ -353,7 +353,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       
       {/* Cancel, Save, and Delete buttons at bottom */}
       {canEdit && isEditing && (
-        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-lg shadow-lg flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-t-lg shadow-[0_-4px_6px_-1px_rgb(0_0_0_/0.1)] flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <button 
             onClick={async () => {
               setIsDeleting(true);
@@ -364,7 +364,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               }
             }}
             disabled={isUploading || isDeleting}
-            className="flex items-center justify-center px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium disabled:opacity-50 transition-colors w-full sm:w-auto"
+            className="flex items-center justify-center px-6 py-2.5 h-10 rounded-md bg-red-600 text-white hover:bg-red-700 text-sm font-medium disabled:opacity-50 transition-colors w-full sm:w-auto"
           >
             {isDeleting ? (
               <RefreshCw size={18} className="mr-2 animate-spin" />
@@ -377,7 +377,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
             {exists && (
               <button 
                 onClick={() => { setForm(equipment); setIsEditing(false); }} 
-                className="flex items-center justify-center px-6 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors w-full sm:w-auto"
+                className="flex items-center justify-center px-6 py-2.5 h-10 rounded-md bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-slate-300 transition-colors w-full sm:w-auto"
               >
                 Cancel
               </button>
@@ -385,7 +385,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
             <button 
               disabled={isUploading} 
               onClick={saveChanges} 
-              className="flex items-center justify-center px-6 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium disabled:opacity-50 transition-colors w-full sm:w-auto"
+              className="flex items-center justify-center px-6 py-2.5 h-10 rounded-md bg-brand-600 text-white hover:bg-brand-700 text-sm font-medium disabled:opacity-50 transition-colors w-full sm:w-auto shadow-sm"
             >
               {isUploading ? "Saving..." : "Save"}
             </button>

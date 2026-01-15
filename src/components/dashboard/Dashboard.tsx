@@ -41,17 +41,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
   );
 
   return (
-    <div className="space-y-6 animate-fade-in pb-16">
-      <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+    <div className="space-y-8 animate-fade-in pb-16">
+      <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Facility Overview</h1>
-          <p className="text-slate-500">Welcome to WayFinder Dashboard</p>
+          <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">Facility Overview</h1>
+          <p className="text-slate-500 text-sm mt-1.5">Welcome to WayFinder Dashboard</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {!isAuthenticated && (
             <button
               onClick={onLoginClick}
-              className="px-4 py-2 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 transition-colors flex items-center gap-2"
+              className="px-4 py-2 h-9 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors flex items-center gap-2 shadow-sm"
             >
               <LogIn size={16} />
               <span>Log In</span>
@@ -59,52 +59,60 @@ export const Dashboard: React.FC<DashboardProps> = ({
           )}
           <button
             onClick={onViewEquipment}
-            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors whitespace-nowrap"
+            className="px-4 py-2 h-9 rounded-md bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-slate-300 transition-colors whitespace-nowrap"
           >
             View Equipment
           </button>
           <button
             onClick={onViewBuildings}
-            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors whitespace-nowrap"
+            className="px-4 py-2 h-9 rounded-md bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-slate-300 transition-colors whitespace-nowrap"
           >
             View Buildings
           </button>
         </div>
       </header>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
-          <div className="absolute top-4 right-4 p-2 rounded-full opacity-10 bg-brand-600 text-brand-600">
-            <BuildingIcon size={24} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-6 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 rounded-md bg-brand-50">
+              <BuildingIcon className="text-brand-600" size={18} />
+            </div>
           </div>
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Buildings</span>
-          <span className="text-3xl font-bold mt-2 text-slate-800">{data.length}</span>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Total Buildings</p>
+          <p className="text-3xl font-semibold text-slate-900">{data.length}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
-          <div className="absolute top-4 right-4 p-2 rounded-full opacity-10 bg-green-600 text-green-600">
-            <Wrench size={24} />
+        <div className="bg-white p-6 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 rounded-md bg-brand-50">
+              <Wrench className="text-brand-600" size={18} />
+            </div>
           </div>
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Equipment</span>
-          <span className="text-3xl font-bold mt-2 text-slate-800">{totalEquipment}</span>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Total Equipment</p>
+          <p className="text-3xl font-semibold text-slate-900">{totalEquipment}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
-          <div className="absolute top-4 right-4 p-2 rounded-full opacity-10 bg-orange-600 text-orange-600">
-            <MapPin size={24} />
+        <div className="bg-white p-6 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 rounded-md bg-brand-50">
+              <MapPin className="text-brand-600" size={18} />
+            </div>
           </div>
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Maint. Rooms</span>
-          <span className="text-3xl font-bold mt-2 text-slate-800">{totalRooms}</span>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Maint. Rooms</p>
+          <p className="text-3xl font-semibold text-slate-900">{totalRooms}</p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
-          <div className="absolute top-4 right-4 p-2 rounded-full opacity-10 bg-purple-600 text-purple-600">
-            <ImageIcon size={24} />
+        <div className="bg-white p-6 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 rounded-md bg-brand-50">
+              <ImageIcon className="text-brand-600" size={18} />
+            </div>
           </div>
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Floor Plans</span>
-          <span className="text-3xl font-bold mt-2 text-slate-800">{totalPlans}</span>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Floor Plans</p>
+          <p className="text-3xl font-semibold text-slate-900">{totalPlans}</p>
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <h2 className="text-lg font-semibold mb-6 text-slate-700">Top Equipment Density by Building</h2>
+      <div className="bg-white p-8 rounded-lg border border-slate-200">
+        <h2 className="text-lg font-semibold mb-6 text-slate-900">Top Equipment Density by Building</h2>
         <div className="h-64 md:h-80 min-h-0">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -113,9 +121,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <YAxis tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
               <Tooltip 
                 cursor={{fill: '#f1f5f9'}}
-                contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                contentStyle={{borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)'}}
               />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={40} fill="#0ea5e9" />
+              <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={40} fill="#5b6cff" />
             </BarChart>
           </ResponsiveContainer>
         </div>

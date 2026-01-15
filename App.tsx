@@ -376,31 +376,31 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex w-64 bg-brand-900 text-white flex-col shadow-xl z-20">
-        <div className="p-6 flex items-center space-x-3 border-b border-brand-800">
-           <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center shadow-lg shadow-brand-500/30">
-             <MapPin className="text-white" size={20} />
+      <aside className="hidden md:flex w-64 bg-slate-900 text-white flex-col border-r border-slate-800 z-20">
+        <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
+           <div className="w-8 h-8 bg-brand-600 rounded-md flex items-center justify-center">
+             <MapPin className="text-white" size={18} />
            </div>
-           <span className="text-xl font-bold tracking-tight">WayFinder</span>
+           <span className="text-lg font-semibold tracking-tight">WayFinder</span>
         </div>
         
-        <nav className="flex-1 py-6 space-y-1">
+        <nav className="flex-1 py-4 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} onClick={() => navigate('/')} />
           <SidebarItem icon={Wrench} label="Equipment" active={location.pathname.startsWith('/equipment')} onClick={() => navigate('/equipment')} />
           <SidebarItem icon={BuildingIcon} label="Buildings" active={location.pathname.startsWith('/building') && !location.pathname.startsWith('/rooms')} onClick={() => navigate('/building')} />
           <SidebarItem icon={MapPin} label="All Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
         </nav>
 
-        <div className="p-6 border-t border-brand-800 space-y-4">
-            {error && <div className="text-red-300 flex items-center justify-center text-xs mb-2"><WifiOff size={12} className="mr-1"/> Offline / Preview Mode</div>}
+        <div className="p-6 border-t border-slate-800 space-y-3">
+            {error && <div className="text-amber-400 flex items-center justify-center text-xs mb-2"><WifiOff size={12} className="mr-1"/> Offline / Preview Mode</div>}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-brand-800 hover:bg-brand-700 text-white rounded-lg transition-colors font-medium text-sm"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2 h-9 bg-slate-800 hover:bg-slate-700 text-white rounded-md transition-colors text-sm font-medium"
             >
               <LogOut size={16} />
               <span>Logout</span>
             </button>
-            <p className="text-brand-200 text-xs text-center">&copy; 2026 WayFinder v1.0</p>
+            <p className="text-slate-400 text-xs text-center">&copy; 2026 WayFinder v1.0</p>
         </div>
       </aside>
 

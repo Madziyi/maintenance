@@ -479,41 +479,41 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
 
   return (
       <div className="space-y-6 pb-20">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-lg border border-slate-200">
               <div className="flex items-center space-x-4">
                   <button 
                       onClick={() => navigate('/building')} 
-                      className="p-2 hover:bg-slate-100 rounded-full text-slate-500"
+                      className="p-2 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
                   >
-                      <ArrowLeft size={24}/>
+                      <ArrowLeft size={20}/>
                   </button>
                   <div>
-                      <h1 className="text-xl md:text-2xl font-bold text-slate-800">{selectedBuilding.name}</h1>
-                      <p className="text-slate-500 text-sm">Select a maintenance room to view details</p>
+                      <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">{selectedBuilding.name}</h1>
+                      <p className="text-slate-500 text-sm mt-1.5">Select a maintenance room to view details</p>
                   </div>
               </div>
-              <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto">
+              <div className="flex flex-col items-stretch md:items-end gap-2.5 w-full md:w-auto">
                   {canEdit && (
                     <>
                       <button 
                           onClick={handleCreateRoom} 
-                          className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 shadow-sm"
+                          className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 h-9 rounded-md text-sm font-medium flex items-center justify-center hover:bg-brand-700 transition-colors shadow-sm"
                       >
-                          <Plus size={18} className="mr-2" /> Add Room
+                          <Plus size={16} className="mr-2" /> Add Room
                       </button>
                       <button 
                           onClick={handleCreateEquipment} 
-                          className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 shadow-sm"
+                          className="w-full md:w-auto bg-brand-600 text-white px-4 py-2 h-9 rounded-md text-sm font-medium flex items-center justify-center hover:bg-brand-700 transition-colors shadow-sm"
                       >
-                          <Wrench size={18} className="mr-2" /> Add Equipment
+                          <Wrench size={16} className="mr-2" /> Add Equipment
                       </button>
                     </>
                   )}
                   <button
                       onClick={handleShareBuilding}
-                      className="w-full md:w-auto bg-white text-slate-700 px-4 py-2 rounded-lg font-medium flex items-center justify-center border border-slate-200 hover:bg-slate-50 shadow-sm"
+                      className="w-full md:w-auto bg-white text-slate-700 px-4 py-2 h-9 rounded-md text-sm font-medium flex items-center justify-center border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors"
                   >
-                      <Share2 size={18} className="mr-2" /> Share
+                      <Share2 size={16} className="mr-2" /> Share
                   </button>
               </div>
           </div>
@@ -521,9 +521,9 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
           {/* Add Room Modal */}
           {canEdit && isAddingRoom && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-fade-in">
-                      <div className="flex justify-between items-center mb-4">
-                          <h2 className="text-xl font-bold text-slate-800">Add New Room</h2>
+                  <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-fade-in border border-slate-200">
+                      <div className="flex justify-between items-center mb-6">
+                          <h2 className="text-xl font-semibold text-slate-900">Add New Room</h2>
                           <button 
                               onClick={handleCancelAddRoom}
                               className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -612,9 +612,9 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
           {/* Add Equipment Modal */}
           {canEdit && isAddingEquipment && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 animate-fade-in max-h-[90vh] overflow-y-auto">
-                      <div className="flex justify-between items-center mb-4">
-                          <h2 className="text-xl font-bold text-slate-800">
+                  <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 animate-fade-in max-h-[90vh] overflow-y-auto border border-slate-200">
+                      <div className="flex justify-between items-center mb-6">
+                          <h2 className="text-xl font-semibold text-slate-900">
                               {newEquipmentName ? 'Duplicate Equipment' : 'Add New Equipment'}
                           </h2>
                           <button 
@@ -867,7 +867,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
               </div>
           )}
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 md:p-6 flex flex-col md:flex-row gap-6">
+          <div className="bg-white rounded-lg border border-slate-200 p-6 md:p-8 flex flex-col md:flex-row gap-8">
                <div 
                   className="w-full md:w-1/3 aspect-video bg-slate-100 rounded-lg border border-slate-200 overflow-hidden relative group"
                   onClick={() => selectedBuilding.buildingImage && !isUploadingBuildingImage && onSetFullScreenImage(selectedBuilding.buildingImage || null)}
@@ -939,13 +939,13 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                    <div>
                       <h3 className="font-bold text-slate-800 text-lg">Building Details</h3>
                       <div className="grid grid-cols-2 gap-4 mt-2">
-                           <div className="bg-slate-50 p-3 rounded border border-slate-100">
-                               <span className="text-xs text-slate-500 font-bold uppercase block">Code</span>
-                               <span className="text-brand-700 font-mono font-bold">{selectedBuilding.code}</span>
+                           <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+                               <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide block mb-1">Code</span>
+                               <span className="text-brand-600 font-mono font-semibold text-lg">{selectedBuilding.code}</span>
                            </div>
-                           <div className="bg-slate-50 p-3 rounded border border-slate-100">
-                               <span className="text-xs text-slate-500 font-bold uppercase block">Total Rooms</span>
-                               <span className="text-slate-800 font-bold">{selectedBuilding.maintenanceRooms.length}</span>
+                           <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+                               <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide block mb-1">Total Rooms</span>
+                               <span className="text-slate-900 font-semibold text-lg">{selectedBuilding.maintenanceRooms.length}</span>
                            </div>
                            <div className="col-span-2">
                               <label className="block text-xs text-slate-500 font-bold uppercase mb-1">Google Maps Link</label>
@@ -986,8 +986,8 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
           </div>
 
           {/* Rooms Section */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-              <h2 className="text-lg font-bold text-slate-800 mb-4">Rooms</h2>
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+              <h2 className="text-lg font-semibold text-slate-900 mb-5">Rooms</h2>
               
               <div className="flex flex-wrap items-center gap-3 mb-4">
                   <span className="text-sm font-medium text-slate-700">Filters:</span>
@@ -999,10 +999,10 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               setShowFloorFilter(!showFloorFilter);
                               setShowDescriptionFilter(false);
                           }}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                          className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
                               selectedFloors.length > 0
                                   ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                           }`}
                       >
                           <Layers size={14} />
@@ -1056,10 +1056,10 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               setShowDescriptionFilter(!showDescriptionFilter);
                               setShowFloorFilter(false);
                           }}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                          className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
                               selectedDescriptions.length > 0
                                   ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                           }`}
                       >
                           <FileText size={14} />
@@ -1157,14 +1157,14 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
               </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col">
               <div className="overflow-x-auto">
                   <table className="w-full text-left">
                       <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
-                              <th className="p-4 text-sm font-bold text-slate-600">Room #</th>
-                              <th className="p-4 text-sm font-bold text-slate-600">Floor</th>
-                              <th className="p-4 text-sm font-bold text-slate-600">Description</th>
+                              <th className="py-3.5 px-6 text-xs font-semibold text-slate-600 uppercase tracking-wider">Room #</th>
+                              <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Floor</th>
+                              <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Description</th>
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1172,15 +1172,15 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               filteredRooms.map(room => (
                                   <tr 
                                       key={room.id} 
-                                      className="hover:bg-slate-50 group cursor-pointer" 
+                                      className="hover:bg-slate-50 group cursor-pointer transition-colors" 
                                       onClick={() => navigate(`/building/${selectedBuilding.code}/room/${room.id}`)}
                                   >
-                                      <td className="p-4 font-bold text-slate-700 flex items-center">
+                                      <td className="py-3.5 px-6 font-semibold text-slate-900 flex items-center">
                                           <ChevronRight size={16} className="text-slate-300 mr-2 group-hover:text-brand-600 transition-colors" />
                                           {room.RoomNumber}
                                       </td>
-                                      <td className="p-4 text-slate-600">{room.Floor || '—'}</td>
-                                      <td className="p-4 text-slate-600">{room.Description || '—'}</td>
+                                      <td className="py-3.5 px-4 text-sm text-slate-700">{room.Floor || '—'}</td>
+                                      <td className="py-3.5 px-4 text-sm text-slate-700">{room.Description || '—'}</td>
                                   </tr>
                               ))
                           ) : (
@@ -1196,8 +1196,8 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
           </div>
 
           {/* Equipment Section */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-              <h2 className="text-lg font-bold text-slate-800 mb-4">Equipment</h2>
+          <div className="bg-white rounded-lg border border-slate-200 p-6">
+              <h2 className="text-lg font-semibold text-slate-900 mb-5">Equipment</h2>
               
               <div className="flex flex-wrap items-center gap-3 mb-4">
                   <span className="text-sm font-medium text-slate-700">Filters:</span>
@@ -1209,10 +1209,10 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               setShowEquipmentDescriptionFilter(!showEquipmentDescriptionFilter);
                               setShowStatusFilter(false);
                           }}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                          className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
                               selectedEquipmentDescriptions.length > 0
                                   ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                           }`}
                       >
                           <FileText size={14} />
@@ -1266,10 +1266,10 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               setShowStatusFilter(!showStatusFilter);
                               setShowEquipmentDescriptionFilter(false);
                           }}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                          className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
                               selectedStatuses.length > 0
                                   ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                           }`}
                       >
                           <Info size={14} />
@@ -1365,15 +1365,15 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
               </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden flex flex-col">
               <div className="overflow-x-auto">
                   <table className="w-full text-left">
                       <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
-                              <th className="p-4 text-sm font-bold text-slate-600">Equipment</th>
-                              <th className="p-4 text-sm font-bold text-slate-600">Description</th>
-                              <th className="p-4 text-sm font-bold text-slate-600">Room</th>
-                              <th className="p-4 text-sm font-bold text-slate-600">Status</th>
+                              <th className="py-3.5 px-6 text-xs font-semibold text-slate-600 uppercase tracking-wider">Equipment</th>
+                              <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Description</th>
+                              <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Room</th>
+                              <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1381,17 +1381,17 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               filteredEquipment.map(eq => (
                                   <tr 
                                       key={eq.id} 
-                                      className="hover:bg-slate-50 group cursor-pointer" 
+                                      className="hover:bg-slate-50 group cursor-pointer transition-colors" 
                                       onClick={() => navigate(`/equipment/${eq.id}`)}
                                   >
-                                      <td className="p-4 font-bold text-slate-700 flex items-center">
+                                      <td className="py-3.5 px-6 font-semibold text-slate-900 flex items-center">
                                           {canEdit && (
                                               <button
                                                   onClick={(e) => {
                                                       e.stopPropagation();
                                                       handleCreateEquipment(eq);
                                                   }}
-                                                  className="mr-2 p-1.5 rounded hover:bg-brand-100 text-slate-400 hover:text-brand-600 transition-colors"
+                                                  className="mr-2 p-1.5 rounded-md hover:bg-brand-100 text-slate-400 hover:text-brand-600 transition-colors"
                                                   title="Duplicate equipment"
                                               >
                                                   <Copy size={14} />
@@ -1400,15 +1400,15 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                           <ChevronRight size={16} className="text-slate-300 mr-2 group-hover:text-brand-600 transition-colors" />
                                           {eq.Equipment}
                                       </td>
-                                      <td className="p-4 text-slate-600 max-w-xs lg:max-w-md truncate">{eq.EquipmentDesc || '—'}</td>
-                                      <td className="p-4 text-slate-600">{eq.Room || '—'}</td>
-                                      <td className="p-4">
-                                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                            eq.status === 'OPERATING' ? 'bg-green-100 text-green-700' :
-                                            eq.status === 'REPAIR' ? 'bg-red-100 text-red-700' :
-                                            eq.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600' :
-                                            eq.status === 'ONSHELF' ? 'bg-yellow-100 text-yellow-700' :
-                                            'bg-slate-100 text-slate-500'
+                                      <td className="py-3.5 px-4 text-sm text-slate-700 max-w-xs lg:max-w-md truncate">{eq.EquipmentDesc || '—'}</td>
+                                      <td className="py-3.5 px-4 text-sm text-slate-700">{eq.Room || '—'}</td>
+                                      <td className="py-3.5 px-4">
+                                          <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+                                            eq.status === 'OPERATING' ? 'bg-green-50 text-green-700 border border-green-200' :
+                                            eq.status === 'REPAIR' ? 'bg-red-50 text-red-700 border border-red-200' :
+                                            eq.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
+                                            eq.status === 'ONSHELF' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                                            'bg-slate-100 text-slate-500 border border-slate-200'
                                           }`}>
                                               {eq.status || 'UNKNOWN'}
                                           </span>
@@ -1417,7 +1417,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               ))
                           ) : (
                               <tr>
-                                  <td colSpan={4} className="p-8 text-center text-slate-400">
+                                  <td colSpan={4} className="py-12 px-6 text-center text-slate-400 text-sm">
                                       No equipment matches the selected filters
                                   </td>
                               </tr>

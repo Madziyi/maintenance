@@ -548,8 +548,8 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     <div className="animate-fade-in space-y-6 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Equipment Directory</h1>
-          <p className="text-slate-500 text-sm">{filtered.length} assets found</p>
+          <h1 className="text-3xl font-semibold text-slate-900 tracking-tight">Equipment Directory</h1>
+          <p className="text-slate-500 text-sm mt-1.5">{filtered.length} assets found</p>
         </div>
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full md:w-auto">
           <div className="relative flex-grow md:w-64">
@@ -557,18 +557,18 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
             <input 
               type="text" 
               placeholder="Search equipment..." 
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-slate-200 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full pl-10 pr-4 py-2 h-9 bg-white border-slate-200 border rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex space-x-2">
-            <button onClick={handleExport} className="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-slate-50 whitespace-nowrap shadow-sm">
-              <Download size={18} className="mr-2" /> Export
+            <button onClick={handleExport} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 h-9 rounded-md text-sm font-medium flex items-center justify-center hover:bg-slate-50 hover:border-slate-300 whitespace-nowrap transition-colors">
+              <Download size={16} className="mr-2" /> Export
             </button>
             {canEdit && (
-              <button onClick={handleCreate} className="bg-brand-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap shadow-sm">
-                <Plus size={18} className="mr-2" /> Add
+              <button onClick={handleCreate} className="bg-brand-600 text-white px-4 py-2 h-9 rounded-md text-sm font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap transition-colors shadow-sm">
+                <Plus size={16} className="mr-2" /> Add
               </button>
             )}
           </div>
@@ -576,7 +576,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       </div>
 
       {/* Filter Section with Dropdowns */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+      <div className="bg-white rounded-lg border border-slate-200 p-5">
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <span className="text-sm font-medium text-slate-700">Filters:</span>
           
@@ -588,10 +588,10 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 setShowRoomFilter(false);
                 setShowDescriptionFilter(false);
               }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
                 selectedLocations.length > 0
                   ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
               }`}
             >
               <Building size={14} />
@@ -649,11 +649,11 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                   setShowLocationFilter(false);
                   setShowDescriptionFilter(false);
                 }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                  selectedRooms.length > 0
-                    ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
+              className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
+                selectedRooms.length > 0
+                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+              }`}
               >
                 <MapPin size={14} />
                 Room
@@ -719,10 +719,10 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 setShowLocationFilter(false);
                 setShowRoomFilter(false);
               }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
                 selectedDescriptions.length > 0
                   ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
               }`}
             >
               <FileText size={14} />
@@ -780,10 +780,10 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 setShowRoomFilter(false);
                 setShowDescriptionFilter(false);
               }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 h-8 rounded-md border text-sm font-medium transition-colors ${
                 selectedStatuses.length > 0
                   ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
-                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
               }`}
             >
               <Info size={14} />
@@ -926,18 +926,18 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       </div>
 
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
 
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-              <tr className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-                <th className="py-3 pl-6">ID</th>
-                <th className="py-3">Description</th>
-                <th className="py-3">Building</th>
-                <th className="py-3">Room</th>
-                {/*<th className="py-3 pr-6">Status</th>*/}
+              <tr>
+                <th className="py-3.5 px-6 text-xs font-semibold text-slate-600 uppercase tracking-wider">ID</th>
+                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Description</th>
+                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Building</th>
+                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Room</th>
+                {/*<th className="py-3.5 px-6 text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>*/}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -948,10 +948,10 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                     onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
                     className="hover:bg-slate-50 group transition-colors cursor-pointer"
                   >
-                    <td className="py-3 pl-6 font-mono text-sm font-medium text-brand-700">{e.Equipment}</td>
-                    <td className="py-3 text-sm text-slate-600 max-w-xs lg:max-w-md truncate">{e.EquipmentDesc || "N/A"}</td>
-                    <td className="py-3 text-sm text-slate-600">{e.Location}</td>
-                    <td className="py-3 text-sm text-slate-600">{e.Room || "-"}</td>
+                    <td className="py-3.5 px-6 font-mono text-sm font-medium text-brand-600">{e.Equipment}</td>
+                    <td className="py-3.5 px-4 text-sm text-slate-700 max-w-xs lg:max-w-md truncate">{e.EquipmentDesc || "N/A"}</td>
+                    <td className="py-3.5 px-4 text-sm text-slate-700">{e.Location}</td>
+                    <td className="py-3.5 px-4 text-sm text-slate-700">{e.Room || "-"}</td>
                     {/*<td className="py-3 pr-6">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         e.status === 'OPERATING' ? 'bg-green-100 text-green-700' :
