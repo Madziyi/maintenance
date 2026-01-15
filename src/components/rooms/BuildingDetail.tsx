@@ -476,7 +476,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                         onClick={e => e.stopPropagation()}
                      >
                          <Camera size={16} />
-                         <input type="file" className="hidden" accept="image/*" onChange={handleBuildingImageUpload} disabled={isUploadingBuildingImage}/>
+                         <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handleBuildingImageUpload} disabled={isUploadingBuildingImage}/>
                      </label>
                    )}
                </div>

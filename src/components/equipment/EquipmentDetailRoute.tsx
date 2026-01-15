@@ -40,7 +40,7 @@ export const EquipmentDetailRoute: React.FC<EquipmentDetailRouteProps> = ({
       <EquipmentDetail
           equipment={selectedEquipment}
           data={data}
-          onBack={() => navigate('/equipment')}
+          onBack={() => navigate(`/building/${selectedEquipment.Location}`)}
           onSave={onSave}
           onFindRoom={onFindRoom}
           onSetFullScreenImage={onSetFullScreenImage}

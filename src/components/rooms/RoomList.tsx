@@ -19,8 +19,34 @@ export const RoomList: React.FC<RoomListProps> = ({
   const { showToast } = useToast();
   const allRooms = data.flatMap(b => b.maintenanceRooms);
   
+  // Load filter state from sessionStorage on mount
+  const loadFilterState = () => {
+    try {
+      const saved = sessionStorage.getItem('roomListFilters');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          searchTerm: parsed.searchTerm || '',
+          selectedLocations: parsed.selectedLocations || [],
+          selectedFloors: parsed.selectedFloors || [],
+          selectedDescriptions: parsed.selectedDescriptions || [],
+        };
+      }
+    } catch (e) {
+      console.error('Failed to load filter state:', e);
+    }
+    return {
+      searchTerm: '',
+      selectedLocations: [],
+      selectedFloors: [],
+      selectedDescriptions: [],
+    };
+  };
+
+  const savedFilterState = loadFilterState();
+  
   // Local search state (avoids re-rendering entire App on each keystroke)
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(savedFilterState.searchTerm);
   
   // Add Room state
   const [isAddingRoom, setIsAddingRoom] = useState(false);
@@ -34,9 +60,23 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [showLocationFilter, setShowLocationFilter] = useState(false);
   const [showFloorFilter, setShowFloorFilter] = useState(false);
   const [showDescriptionFilter, setShowDescriptionFilter] = useState(false);
-  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
-  const [selectedFloors, setSelectedFloors] = useState<string[]>([]);
-  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
+  const [selectedLocations, setSelectedLocations] = useState<string[]>(savedFilterState.selectedLocations);
+  const [selectedFloors, setSelectedFloors] = useState<string[]>(savedFilterState.selectedFloors);
+  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>(savedFilterState.selectedDescriptions);
+  
+  // Save filter state to sessionStorage whenever filters change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('roomListFilters', JSON.stringify({
+        searchTerm,
+        selectedLocations,
+        selectedFloors,
+        selectedDescriptions,
+      }));
+    } catch (e) {
+      console.error('Failed to save filter state:', e);
+    }
+  }, [searchTerm, selectedLocations, selectedFloors, selectedDescriptions]);
   
   // Refs for dropdowns
   const locationDropdownRef = useRef<HTMLDivElement>(null);

@@ -306,6 +306,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                     type="file" 
                     className="hidden" 
                     accept="image/*" 
+                    capture="environment"
                     multiple
                     onChange={handlePhotoUpload}
                     disabled={isUploading}
@@ -319,7 +320,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       
       {/* Cancel, Save, and Delete buttons at bottom */}
       {canEdit && isEditing && (
-        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-lg shadow-lg flex justify-between items-center">
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-lg shadow-lg flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <button 
             onClick={async () => {
               setIsDeleting(true);
@@ -330,7 +331,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               }
             }}
             disabled={isUploading || isDeleting}
-            className="flex items-center px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium disabled:opacity-50 transition-colors"
+            className="flex items-center justify-center px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium disabled:opacity-50 transition-colors w-full sm:w-auto"
           >
             {isDeleting ? (
               <RefreshCw size={18} className="mr-2 animate-spin" />
@@ -339,11 +340,11 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
             )}
             {isDeleting ? 'Deleting...' : 'Delete'}
           </button>
-          <div className="flex space-x-3">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             {exists && (
               <button 
                 onClick={() => { setForm(equipment); setIsEditing(false); }} 
-                className="flex items-center px-6 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors"
+                className="flex items-center justify-center px-6 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors w-full sm:w-auto"
               >
                 Cancel
               </button>
@@ -351,7 +352,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
             <button 
               disabled={isUploading} 
               onClick={saveChanges} 
-              className="flex items-center px-6 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium disabled:opacity-50 transition-colors"
+              className="flex items-center justify-center px-6 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium disabled:opacity-50 transition-colors w-full sm:w-auto"
             >
               {isUploading ? "Saving..." : "Save"}
             </button>

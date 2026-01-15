@@ -549,6 +549,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                       type="file" 
                                       className="hidden" 
                                       accept="image/*" 
+                                      capture="environment"
                                       onChange={handleImageUpload} 
                                       multiple
                                       disabled={isUploadingImage}

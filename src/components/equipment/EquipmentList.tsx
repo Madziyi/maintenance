@@ -24,8 +24,36 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const { showToast } = useToast();
   const allEquipment = data.flatMap(b => b.equipment);
   
+  // Load filter state from sessionStorage on mount
+  const loadFilterState = () => {
+    try {
+      const saved = sessionStorage.getItem('equipmentListFilters');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          searchTerm: parsed.searchTerm || '',
+          selectedLocations: parsed.selectedLocations || [],
+          selectedRooms: parsed.selectedRooms || [],
+          selectedDescriptions: parsed.selectedDescriptions || [],
+          selectedStatuses: parsed.selectedStatuses || [],
+        };
+      }
+    } catch (e) {
+      console.error('Failed to load filter state:', e);
+    }
+    return {
+      searchTerm: '',
+      selectedLocations: [],
+      selectedRooms: [],
+      selectedDescriptions: [],
+      selectedStatuses: [],
+    };
+  };
+
+  const savedFilterState = loadFilterState();
+  
   // Local search state (avoids re-rendering entire App on each keystroke)
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(savedFilterState.searchTerm);
   
   // Add Equipment state
   const [isAddingEquipment, setIsAddingEquipment] = useState(false);
@@ -48,10 +76,25 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const [showRoomFilter, setShowRoomFilter] = useState(false);
   const [showDescriptionFilter, setShowDescriptionFilter] = useState(false);
   const [showStatusFilter, setShowStatusFilter] = useState(false);
-  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
-  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
-  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedLocations, setSelectedLocations] = useState<string[]>(savedFilterState.selectedLocations);
+  const [selectedRooms, setSelectedRooms] = useState<string[]>(savedFilterState.selectedRooms);
+  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>(savedFilterState.selectedDescriptions);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(savedFilterState.selectedStatuses);
+  
+  // Save filter state to sessionStorage whenever filters change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('equipmentListFilters', JSON.stringify({
+        searchTerm,
+        selectedLocations,
+        selectedRooms,
+        selectedDescriptions,
+        selectedStatuses,
+      }));
+    } catch (e) {
+      console.error('Failed to save filter state:', e);
+    }
+  }, [searchTerm, selectedLocations, selectedRooms, selectedDescriptions, selectedStatuses]);
   
   // Refs for dropdowns
   const locationDropdownRef = useRef<HTMLDivElement>(null);
@@ -1203,6 +1246,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                     type="file" 
                     className="hidden" 
                     accept="image/*" 
+                    capture="environment"
                     multiple
                     onChange={handlePhotoUpload}
                     disabled={isUploadingImages}

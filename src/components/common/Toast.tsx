@@ -62,7 +62,7 @@ const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemove }) => 
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 max-w-md w-full pointer-events-none">
+    <div className="fixed top-4 right-4 left-4 sm:left-auto sm:max-w-md z-[9999] flex flex-col gap-2 w-auto sm:w-full pointer-events-none">
       {toasts.map(toast => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}
@@ -120,21 +120,21 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
 
   return (
     <div
-      className={`${getBgColor()} ${getTextColor()} border rounded-lg shadow-lg p-4 flex items-start gap-3 pointer-events-auto animate-fade-in`}
+      className={`${getBgColor()} ${getTextColor()} border rounded-lg shadow-lg p-3 sm:p-4 flex items-start gap-2 sm:gap-3 pointer-events-auto animate-fade-in w-full`}
       role="alert"
     >
       <div className="flex-shrink-0 mt-0.5">
         {getIcon()}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium break-words">{toast.message}</p>
+        <p className="text-xs sm:text-sm font-medium break-words">{toast.message}</p>
       </div>
       <button
         onClick={() => onRemove(toast.id)}
-        className="flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+        className="flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors p-1 -mt-1 -mr-1"
         aria-label="Close notification"
       >
-        <X size={18} />
+        <X size={16} className="sm:w-[18px] sm:h-[18px]" />
       </button>
     </div>
   );
