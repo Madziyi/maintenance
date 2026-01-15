@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info } from 'lucide-react';
+import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info, Upload } from 'lucide-react';
 import { BuildingData, Equipment } from '../../../types';
 import { api } from '../../../api';
 import { useToast } from '@/src/components/common/Toast';
@@ -1224,34 +1224,52 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                   </div>
                 )}
                 
-                {/* Upload Button */}
-                <label className={`border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''}`}>
-                  {isUploadingImages ? (
-                    <>
-                      <RefreshCw className="animate-spin text-slate-400" size={24} />
-                      <span className="text-sm text-slate-500 mt-2">Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Camera size={24} className="text-slate-400" />
-                      <span className="text-sm text-slate-500 mt-2">
-                        {newEquipmentImages.length > 0 
-                          ? `Add More Photos (${newEquipmentImages.length} selected)`
-                          : 'Add Photos (Multiple selection allowed)'
-                        }
-                      </span>
-                    </>
-                  )}
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*" 
-                    capture="environment"
-                    multiple
-                    onChange={handlePhotoUpload}
-                    disabled={isUploadingImages}
-                  />
-                </label>
+                {/* Upload Buttons */}
+                <div className="flex gap-2">
+                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {isUploadingImages ? (
+                      <>
+                        <RefreshCw className="animate-spin text-slate-400" size={24} />
+                        <span className="text-sm text-slate-500 mt-2">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={24} className="text-slate-400" />
+                        <span className="text-sm text-slate-500 mt-2">Upload Photo</span>
+                      </>
+                    )}
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*" 
+                      multiple
+                      onChange={handlePhotoUpload}
+                      disabled={isUploadingImages}
+                    />
+                  </label>
+                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {isUploadingImages ? (
+                      <>
+                        <RefreshCw className="animate-spin text-slate-400" size={24} />
+                        <span className="text-sm text-slate-500 mt-2">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera size={24} className="text-slate-400" />
+                        <span className="text-sm text-slate-500 mt-2">Take Photo</span>
+                      </>
+                    )}
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*" 
+                      capture="environment"
+                      multiple
+                      onChange={handlePhotoUpload}
+                      disabled={isUploadingImages}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
             

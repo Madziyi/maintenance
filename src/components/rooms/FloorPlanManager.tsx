@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Plus, X, Upload, RefreshCw, Trash2, Image as ImageIcon, Share2 } from 'lucide-react';
+import { ArrowLeft, Plus, X, Upload, RefreshCw, Trash2, Image as ImageIcon, Share2, Camera } from 'lucide-react';
 import { BuildingData, FloorPlan } from '@/types';
 import { api } from '@/api';
 import { useToast } from '../common/Toast';
@@ -242,7 +242,12 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
                           <div className="flex gap-2">
                               <label className={`flex-1 py-2 rounded text-white font-medium text-sm cursor-pointer flex items-center justify-center ${newPlanName && !uploadingPlan ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-300 cursor-not-allowed'}`}>
                                   {uploadingPlan ? <RefreshCw className="animate-spin mr-2"/> : <Upload size={16} className="mr-2"/>}
-                                  {uploadingPlan ? 'Uploading...' : 'Upload Image'}
+                                  {uploadingPlan ? 'Uploading...' : 'Upload Photo'}
+                                  <input type="file" className="hidden" accept="image/*" disabled={!newPlanName || uploadingPlan} onChange={handleUpload}/>
+                              </label>
+                              <label className={`flex-1 py-2 rounded text-white font-medium text-sm cursor-pointer flex items-center justify-center ${newPlanName && !uploadingPlan ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-300 cursor-not-allowed'}`}>
+                                  {uploadingPlan ? <RefreshCw className="animate-spin mr-2"/> : <Camera size={16} className="mr-2"/>}
+                                  {uploadingPlan ? 'Uploading...' : 'Take Photo'}
                                   <input type="file" className="hidden" accept="image/*" capture="environment" disabled={!newPlanName || uploadingPlan} onChange={handleUpload}/>
                               </label>
                               <button 

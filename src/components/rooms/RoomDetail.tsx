@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Building as BuildingIcon, MapPin, Wrench, Camera, Plus, X, Pencil, ExternalLink, Image as ImageIcon, Map, RefreshCw, ChevronRight, Trash2, Share2 } from 'lucide-react';
+import { ArrowLeft, Building as BuildingIcon, MapPin, Wrench, Camera, Plus, X, Pencil, ExternalLink, Image as ImageIcon, Map, RefreshCw, ChevronRight, Trash2, Share2, Upload } from 'lucide-react';
 import { BuildingData, MaintenanceRoom } from '@/types';
 import { api } from '@/api';
 import { useToast } from '../common/Toast';
@@ -536,25 +536,45 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                           ))}
                           
                           {isEditing && canEdit && (
-                              <label className={`border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
-                                  {isUploadingImage ? (
-                                      <RefreshCw className="animate-spin text-slate-400"/>
-                                  ) : (
-                                      <Plus size={24} className="text-slate-400" />
-                                  )}
-                                  <span className="text-sm text-slate-500 mt-2">
-                                      {isUploadingImage ? 'Uploading...' : `Add Photo${(form.roomImages || []).length > 0 ? ` (${(form.roomImages || []).length} photos)` : ''}`}
-                                  </span>
-                                  <input 
-                                      type="file" 
-                                      className="hidden" 
-                                      accept="image/*" 
-                                      capture="environment"
-                                      onChange={handleImageUpload} 
-                                      multiple
-                                      disabled={isUploadingImage}
-                                  />
-                              </label>
+                              <div className="flex gap-2">
+                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                                      {isUploadingImage ? (
+                                          <RefreshCw className="animate-spin text-slate-400"/>
+                                      ) : (
+                                          <Upload size={24} className="text-slate-400" />
+                                      )}
+                                      <span className="text-sm text-slate-500 mt-2">
+                                          {isUploadingImage ? 'Uploading...' : 'Upload Photo'}
+                                      </span>
+                                      <input 
+                                          type="file" 
+                                          className="hidden" 
+                                          accept="image/*" 
+                                          onChange={handleImageUpload} 
+                                          multiple
+                                          disabled={isUploadingImage}
+                                      />
+                                  </label>
+                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                                      {isUploadingImage ? (
+                                          <RefreshCw className="animate-spin text-slate-400"/>
+                                      ) : (
+                                          <Camera size={24} className="text-slate-400" />
+                                      )}
+                                      <span className="text-sm text-slate-500 mt-2">
+                                          {isUploadingImage ? 'Uploading...' : 'Take Photo'}
+                                      </span>
+                                      <input 
+                                          type="file" 
+                                          className="hidden" 
+                                          accept="image/*" 
+                                          capture="environment"
+                                          onChange={handleImageUpload} 
+                                          multiple
+                                          disabled={isUploadingImage}
+                                      />
+                                  </label>
+                              </div>
                           )}
                       </div>
                   </div>

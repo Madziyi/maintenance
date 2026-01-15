@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2, Wrench, Layers, FileText, Info, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2, Wrench, Layers, FileText, Info, ChevronDown, Upload } from 'lucide-react';
 import { BuildingData } from '@/types';
 import { MaintenanceRoom } from '@/types';
 import { api } from '@/api';
@@ -471,13 +471,24 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                        </>
                    )}
                    {canEdit && (
-                     <label 
-                        className={`absolute bottom-2 right-2 bg-white/90 hover:bg-white text-slate-700 p-2 rounded-full cursor-pointer shadow-sm transition-colors ${isUploadingBuildingImage ? 'opacity-50 pointer-events-none' : ''}`}
-                        onClick={e => e.stopPropagation()}
-                     >
-                         <Camera size={16} />
-                         <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handleBuildingImageUpload} disabled={isUploadingBuildingImage}/>
-                     </label>
+                     <div className="absolute bottom-2 right-2 flex gap-2">
+                         <label 
+                            className={`bg-white/90 hover:bg-white text-slate-700 px-3 py-2 rounded-full cursor-pointer shadow-sm transition-colors flex items-center gap-1.5 ${isUploadingBuildingImage ? 'opacity-50 pointer-events-none' : ''}`}
+                            onClick={e => e.stopPropagation()}
+                         >
+                             <Upload size={14} />
+                             <span className="text-xs">Upload</span>
+                             <input type="file" className="hidden" accept="image/*" onChange={handleBuildingImageUpload} disabled={isUploadingBuildingImage}/>
+                         </label>
+                         <label 
+                            className={`bg-white/90 hover:bg-white text-slate-700 px-3 py-2 rounded-full cursor-pointer shadow-sm transition-colors flex items-center gap-1.5 ${isUploadingBuildingImage ? 'opacity-50 pointer-events-none' : ''}`}
+                            onClick={e => e.stopPropagation()}
+                         >
+                             <Camera size={14} />
+                             <span className="text-xs">Camera</span>
+                             <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handleBuildingImageUpload} disabled={isUploadingBuildingImage}/>
+                         </label>
+                     </div>
                    )}
                </div>
                <div className="flex-1 space-y-4">

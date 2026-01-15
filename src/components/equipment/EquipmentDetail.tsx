@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2, Share2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2, Share2, Upload } from 'lucide-react';
 import { BuildingData, Equipment, ViewState } from '../../../types';
 import { api } from '../../../api';
 import { useToast } from '@/src/components/common/Toast';
@@ -285,33 +285,51 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               ))}
               
               {isEditing && (
-                <label className={`border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                  {isUploading ? (
-                    <>
-                      <RefreshCw className="animate-spin text-slate-400" size={24} />
-                      <span className="text-sm text-slate-500 mt-2">Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus size={24} className="text-slate-400" />
-                      <span className="text-sm text-slate-500 mt-2">
-                        {form.images && form.images.length > 0
-                          ? `Add More Photos (${form.images.length} photos)`
-                          : 'Add Photos (Multiple selection allowed)'
-                        }
-                      </span>
-                    </>
-                  )}
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*" 
-                    capture="environment"
-                    multiple
-                    onChange={handlePhotoUpload}
-                    disabled={isUploading}
-                  />
-                </label>
+                <div className="flex gap-2">
+                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {isUploading ? (
+                      <>
+                        <RefreshCw className="animate-spin text-slate-400" size={24} />
+                        <span className="text-sm text-slate-500 mt-2">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={24} className="text-slate-400" />
+                        <span className="text-sm text-slate-500 mt-2">Upload Photo</span>
+                      </>
+                    )}
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*" 
+                      multiple
+                      onChange={handlePhotoUpload}
+                      disabled={isUploading}
+                    />
+                  </label>
+                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {isUploading ? (
+                      <>
+                        <RefreshCw className="animate-spin text-slate-400" size={24} />
+                        <span className="text-sm text-slate-500 mt-2">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera size={24} className="text-slate-400" />
+                        <span className="text-sm text-slate-500 mt-2">Take Photo</span>
+                      </>
+                    )}
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*" 
+                      capture="environment"
+                      multiple
+                      onChange={handlePhotoUpload}
+                      disabled={isUploading}
+                    />
+                  </label>
+                </div>
               )}
             </div>
           </div>
