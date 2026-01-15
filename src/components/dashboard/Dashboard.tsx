@@ -42,12 +42,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6 animate-fade-in pb-16">
-      <header className="flex justify-between items-center">
+      <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Facility Overview</h1>
           <p className="text-slate-500">Welcome to WayFinder Dashboard</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {!isAuthenticated && (
             <button
               onClick={onLoginClick}
@@ -59,13 +59,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
           )}
           <button
             onClick={onViewEquipment}
-            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors whitespace-nowrap"
           >
             View Equipment
           </button>
           <button
             onClick={onViewBuildings}
-            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors whitespace-nowrap"
           >
             View Buildings
           </button>

@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2 } from 'lucide-react';
+import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2, Wrench, Layers, FileText, Info, ChevronDown } from 'lucide-react';
 import { BuildingData } from '@/types';
 import { MaintenanceRoom } from '@/types';
 import { api } from '@/api';
@@ -36,10 +36,44 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingBuildingImage, setIsUploadingBuildingImage] = useState(false);
   
-  // Filter state
-  const [showFilters, setShowFilters] = useState(false);
+  // Room filter state
+  const [showFloorFilter, setShowFloorFilter] = useState(false);
+  const [showDescriptionFilter, setShowDescriptionFilter] = useState(false);
   const [selectedFloors, setSelectedFloors] = useState<string[]>([]);
   const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
+  
+  // Equipment filter state
+  const [showEquipmentDescriptionFilter, setShowEquipmentDescriptionFilter] = useState(false);
+  const [showStatusFilter, setShowStatusFilter] = useState(false);
+  const [selectedEquipmentDescriptions, setSelectedEquipmentDescriptions] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  
+  // Refs for dropdowns
+  const floorDropdownRef = useRef<HTMLDivElement>(null);
+  const descriptionDropdownRef = useRef<HTMLDivElement>(null);
+  const equipmentDescriptionDropdownRef = useRef<HTMLDivElement>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (floorDropdownRef.current && !floorDropdownRef.current.contains(event.target as Node)) {
+        setShowFloorFilter(false);
+      }
+      if (descriptionDropdownRef.current && !descriptionDropdownRef.current.contains(event.target as Node)) {
+        setShowDescriptionFilter(false);
+      }
+      if (equipmentDescriptionDropdownRef.current && !equipmentDescriptionDropdownRef.current.contains(event.target as Node)) {
+        setShowEquipmentDescriptionFilter(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusFilter(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (!selectedBuilding) {
       return <Navigate to="/building" replace />;
@@ -102,7 +136,82 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       setSelectedDescriptions([]);
   };
 
+  const removeFloor = (floor: string) => {
+      toggleFloor(floor);
+  };
+
+  const removeDescription = (desc: string) => {
+      toggleDescription(desc);
+  };
+
   const hasActiveFilters = selectedFloors.length > 0 || selectedDescriptions.length > 0;
+  
+  // Equipment filter options
+  const equipmentDescriptionOptions = useMemo(() => {
+    const descriptions = selectedBuilding.equipment
+      .map(e => e.EquipmentDesc?.trim())
+      .filter(d => d && d !== '')
+      .filter((d, i, arr) => arr.indexOf(d) === i)
+      .sort();
+    return descriptions;
+  }, [selectedBuilding.equipment]);
+  
+  const statusOptions: Array<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'> = ['INACTIVE', 'ONSHELF', 'OPERATING', 'REPAIR', 'UNKNOWN'];
+  
+  const statusOptionsWithCounts = useMemo(() => {
+    return statusOptions.map(status => ({
+      value: status,
+      count: selectedBuilding.equipment.filter(e => (e.status || 'UNKNOWN') === status).length
+    }));
+  }, [selectedBuilding.equipment]);
+  
+  // Filtered equipment
+  const filteredEquipment = useMemo(() => {
+    return selectedBuilding.equipment.filter(eq => {
+      const eqDesc = eq.EquipmentDesc?.trim() || '';
+      const eqStatus = eq.status || 'UNKNOWN';
+      
+      const descMatch = selectedEquipmentDescriptions.length === 0 ||
+        selectedEquipmentDescriptions.includes(eqDesc);
+      
+      const statusMatch = selectedStatuses.length === 0 ||
+        selectedStatuses.includes(eqStatus);
+      
+      return descMatch && statusMatch;
+    });
+  }, [selectedBuilding.equipment, selectedEquipmentDescriptions, selectedStatuses]);
+  
+  // Toggle equipment filter selection
+  const toggleEquipmentDescription = (desc: string) => {
+    setSelectedEquipmentDescriptions(prev =>
+      prev.includes(desc)
+        ? prev.filter(d => d !== desc)
+        : [...prev, desc]
+    );
+  };
+  
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses(prev =>
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+  
+  const clearEquipmentFilters = () => {
+    setSelectedEquipmentDescriptions([]);
+    setSelectedStatuses([]);
+  };
+  
+  const removeEquipmentDescription = (desc: string) => {
+    toggleEquipmentDescription(desc);
+  };
+  
+  const removeStatus = (status: string) => {
+    toggleStatus(status);
+  };
+  
+  const hasActiveEquipmentFilters = selectedEquipmentDescriptions.length > 0 || selectedStatuses.length > 0;
 
   const handleCreateRoom = () => {
       if (!canEdit) return;
@@ -421,100 +530,176 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                </div>
           </div>
 
-          {/* Filter Section */}
+          {/* Rooms Section */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-              <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
+              <h2 className="text-lg font-bold text-slate-800 mb-4">Rooms</h2>
+              
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <span className="text-sm font-medium text-slate-700">Filters:</span>
+                  
+                  {/* Floor Filter Dropdown */}
+                  <div className="relative" ref={floorDropdownRef}>
                       <button
-                          onClick={() => setShowFilters(!showFilters)}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium transition-colors"
+                          onClick={() => {
+                              setShowFloorFilter(!showFloorFilter);
+                              setShowDescriptionFilter(false);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                              selectedFloors.length > 0
+                                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
                       >
-                          <Filter size={16} />
-                          Filters
-                          {hasActiveFilters && (
+                          <Layers size={14} />
+                          Floor
+                          {selectedFloors.length > 0 && (
                               <span className="bg-brand-600 text-white text-xs px-1.5 py-0.5 rounded-full">
-                                  {selectedFloors.length + selectedDescriptions.length}
+                                  {selectedFloors.length}
                               </span>
                           )}
+                          <ChevronDown size={14} className={showFloorFilter ? 'transform rotate-180' : ''} />
                       </button>
-                      {hasActiveFilters && (
+                      
+                      {showFloorFilter && (
+                          <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                              <div className="p-3">
+                                  <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                                      Select Floors ({floorOptions.length})
+                                  </div>
+                                  <div className="space-y-1.5">
+                                      {floorOptions.length > 0 ? (
+                                          floorOptions.map(floor => (
+                                              <label
+                                                  key={floor}
+                                                  className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                                              >
+                                                  <input
+                                                      type="checkbox"
+                                                      checked={selectedFloors.includes(floor)}
+                                                      onChange={() => toggleFloor(floor)}
+                                                      className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-sm text-slate-700 flex-1">{floor}</span>
+                                                  <span className="text-xs text-slate-400">
+                                                      ({selectedBuilding.maintenanceRooms.filter(r => r.Floor?.trim() === floor).length})
+                                                  </span>
+                                              </label>
+                                          ))
+                                      ) : (
+                                          <p className="text-xs text-slate-400 italic">No floor data available</p>
+                                      )}
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* Description Filter Dropdown */}
+                  <div className="relative" ref={descriptionDropdownRef}>
+                      <button
+                          onClick={() => {
+                              setShowDescriptionFilter(!showDescriptionFilter);
+                              setShowFloorFilter(false);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                              selectedDescriptions.length > 0
+                                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                      >
+                          <FileText size={14} />
+                          Description
+                          {selectedDescriptions.length > 0 && (
+                              <span className="bg-brand-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                                  {selectedDescriptions.length}
+                              </span>
+                          )}
+                          <ChevronDown size={14} className={showDescriptionFilter ? 'transform rotate-180' : ''} />
+                      </button>
+                      
+                      {showDescriptionFilter && (
+                          <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                              <div className="p-3">
+                                  <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                                      Select Descriptions ({descriptionOptions.length})
+                                  </div>
+                                  <div className="space-y-1.5">
+                                      {descriptionOptions.length > 0 ? (
+                                          descriptionOptions.map(desc => (
+                                              <label
+                                                  key={desc}
+                                                  className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                                              >
+                                                  <input
+                                                      type="checkbox"
+                                                      checked={selectedDescriptions.includes(desc)}
+                                                      onChange={() => toggleDescription(desc)}
+                                                      className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-sm text-slate-700 flex-1 line-clamp-1" title={desc}>{desc}</span>
+                                                  <span className="text-xs text-slate-400">
+                                                      ({selectedBuilding.maintenanceRooms.filter(r => r.Description?.trim() === desc).length})
+                                                  </span>
+                                              </label>
+                                          ))
+                                      ) : (
+                                          <p className="text-xs text-slate-400 italic">No description data available</p>
+                                      )}
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* Active Filter Chips */}
+                  {hasActiveFilters && (
+                      <>
+                          {selectedFloors.map(floor => (
+                              <div
+                                  key={floor}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm"
+                              >
+                                  <Layers size={12} />
+                                  <span>{floor}</span>
+                                  <button
+                                      onClick={() => removeFloor(floor)}
+                                      className="hover:bg-brand-200 rounded p-0.5 transition-colors"
+                                  >
+                                      <X size={12} />
+                                  </button>
+                              </div>
+                          ))}
+                          
+                          {selectedDescriptions.map(desc => (
+                              <div
+                                  key={desc}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm max-w-xs"
+                              >
+                                  <FileText size={12} />
+                                  <span className="truncate" title={desc}>{desc}</span>
+                                  <button
+                                      onClick={() => removeDescription(desc)}
+                                      className="hover:bg-brand-200 rounded p-0.5 transition-colors flex-shrink-0"
+                                  >
+                                      <X size={12} />
+                                  </button>
+                              </div>
+                          ))}
+                          
                           <button
                               onClick={clearFilters}
-                              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors"
+                              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors px-2 py-1"
                           >
                               <X size={12} />
                               Clear all
                           </button>
-                      )}
-                  </div>
-                  <span className="text-sm text-slate-500">
-                      Showing {filteredRooms.length} of {selectedBuilding.maintenanceRooms.length} rooms
-                  </span>
+                      </>
+                  )}
               </div>
-
-              {showFilters && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-200">
-                      {/* Floor Filter */}
-                      <div>
-                          <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
-                              Floor ({floorOptions.length} options)
-                          </label>
-                          <div className="max-h-40 overflow-y-auto space-y-1.5">
-                              {floorOptions.length > 0 ? (
-                                  floorOptions.map(floor => (
-                                      <label
-                                          key={floor}
-                                          className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
-                                      >
-                                          <input
-                                              type="checkbox"
-                                              checked={selectedFloors.includes(floor)}
-                                              onChange={() => toggleFloor(floor)}
-                                              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                                          />
-                                          <span className="text-sm text-slate-700">{floor}</span>
-                                          <span className="text-xs text-slate-400 ml-auto">
-                                              ({selectedBuilding.maintenanceRooms.filter(r => r.Floor?.trim() === floor).length})
-                                          </span>
-                                      </label>
-                                  ))
-                              ) : (
-                                  <p className="text-xs text-slate-400 italic">No floor data available</p>
-                              )}
-                          </div>
-                      </div>
-
-                      {/* Description Filter */}
-                      <div>
-                          <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
-                              Description ({descriptionOptions.length} options)
-                          </label>
-                          <div className="max-h-40 overflow-y-auto space-y-1.5">
-                              {descriptionOptions.length > 0 ? (
-                                  descriptionOptions.map(desc => (
-                                      <label
-                                          key={desc}
-                                          className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
-                                      >
-                                          <input
-                                              type="checkbox"
-                                              checked={selectedDescriptions.includes(desc)}
-                                              onChange={() => toggleDescription(desc)}
-                                              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                                          />
-                                          <span className="text-sm text-slate-700">{desc}</span>
-                                          <span className="text-xs text-slate-400 ml-auto">
-                                              ({selectedBuilding.maintenanceRooms.filter(r => r.Description?.trim() === desc).length})
-                                          </span>
-                                      </label>
-                                  ))
-                              ) : (
-                                  <p className="text-xs text-slate-400 italic">No description data available</p>
-                              )}
-                          </div>
-                      </div>
-                  </div>
-              )}
+              
+              <div className="text-sm text-slate-500 pt-2 border-t border-slate-200">
+                  Showing {filteredRooms.length} of {selectedBuilding.maintenanceRooms.length} rooms
+              </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
@@ -547,6 +732,226 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               <tr>
                                   <td colSpan={3} className="p-8 text-center text-slate-400">
                                       No rooms match the selected filters
+                                  </td>
+                              </tr>
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+
+          {/* Equipment Section */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+              <h2 className="text-lg font-bold text-slate-800 mb-4">Equipment</h2>
+              
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <span className="text-sm font-medium text-slate-700">Filters:</span>
+                  
+                  {/* Description Filter Dropdown */}
+                  <div className="relative" ref={equipmentDescriptionDropdownRef}>
+                      <button
+                          onClick={() => {
+                              setShowEquipmentDescriptionFilter(!showEquipmentDescriptionFilter);
+                              setShowStatusFilter(false);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                              selectedEquipmentDescriptions.length > 0
+                                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                      >
+                          <FileText size={14} />
+                          Description
+                          {selectedEquipmentDescriptions.length > 0 && (
+                              <span className="bg-brand-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                                  {selectedEquipmentDescriptions.length}
+                              </span>
+                          )}
+                          <ChevronDown size={14} className={showEquipmentDescriptionFilter ? 'transform rotate-180' : ''} />
+                      </button>
+                      
+                      {showEquipmentDescriptionFilter && (
+                          <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                              <div className="p-3">
+                                  <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                                      Select Descriptions ({equipmentDescriptionOptions.length})
+                                  </div>
+                                  <div className="space-y-1.5">
+                                      {equipmentDescriptionOptions.length > 0 ? (
+                                          equipmentDescriptionOptions.map(desc => (
+                                              <label
+                                                  key={desc}
+                                                  className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                                              >
+                                                  <input
+                                                      type="checkbox"
+                                                      checked={selectedEquipmentDescriptions.includes(desc)}
+                                                      onChange={() => toggleEquipmentDescription(desc)}
+                                                      className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                                  />
+                                                  <span className="text-sm text-slate-700 flex-1 line-clamp-1" title={desc}>{desc}</span>
+                                                  <span className="text-xs text-slate-400">
+                                                      ({selectedBuilding.equipment.filter(e => e.EquipmentDesc?.trim() === desc).length})
+                                                  </span>
+                                              </label>
+                                          ))
+                                      ) : (
+                                          <p className="text-xs text-slate-400 italic">No description data available</p>
+                                      )}
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* Status Filter Dropdown */}
+                  <div className="relative" ref={statusDropdownRef}>
+                      <button
+                          onClick={() => {
+                              setShowStatusFilter(!showStatusFilter);
+                              setShowEquipmentDescriptionFilter(false);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                              selectedStatuses.length > 0
+                                  ? 'bg-brand-50 border-brand-300 text-brand-700 hover:bg-brand-100'
+                                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                      >
+                          <Info size={14} />
+                          Status
+                          {selectedStatuses.length > 0 && (
+                              <span className="bg-brand-600 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                                  {selectedStatuses.length}
+                              </span>
+                          )}
+                          <ChevronDown size={14} className={showStatusFilter ? 'transform rotate-180' : ''} />
+                      </button>
+                      
+                      {showStatusFilter && (
+                          <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                              <div className="p-3">
+                                  <div className="text-xs font-bold text-slate-600 uppercase mb-2">
+                                      Select Status ({statusOptionsWithCounts.length})
+                                  </div>
+                                  <div className="space-y-1.5">
+                                      {statusOptionsWithCounts.map(status => (
+                                          <label
+                                              key={status.value}
+                                              className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
+                                          >
+                                              <input
+                                                  type="checkbox"
+                                                  checked={selectedStatuses.includes(status.value)}
+                                                  onChange={() => toggleStatus(status.value)}
+                                                  className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                                              />
+                                              <span className="text-sm text-slate-700 flex-1">
+                                                  {status.value}
+                                              </span>
+                                              <span className="text-xs text-slate-400">
+                                                  ({status.count})
+                                              </span>
+                                          </label>
+                                      ))}
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* Active Filter Chips */}
+                  {hasActiveEquipmentFilters && (
+                      <>
+                          {selectedEquipmentDescriptions.map(desc => (
+                              <div
+                                  key={desc}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm max-w-xs"
+                              >
+                                  <FileText size={12} />
+                                  <span className="truncate" title={desc}>{desc}</span>
+                                  <button
+                                      onClick={() => removeEquipmentDescription(desc)}
+                                      className="hover:bg-brand-200 rounded p-0.5 transition-colors flex-shrink-0"
+                                  >
+                                      <X size={12} />
+                                  </button>
+                              </div>
+                          ))}
+                          
+                          {selectedStatuses.map(status => (
+                              <div
+                                  key={status}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm"
+                              >
+                                  <Info size={12} />
+                                  <span>{status}</span>
+                                  <button
+                                      onClick={() => removeStatus(status)}
+                                      className="hover:bg-brand-200 rounded p-0.5 transition-colors flex-shrink-0"
+                                  >
+                                      <X size={12} />
+                                  </button>
+                              </div>
+                          ))}
+                          
+                          <button
+                              onClick={clearEquipmentFilters}
+                              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors px-2 py-1"
+                          >
+                              <X size={12} />
+                              Clear all
+                          </button>
+                      </>
+                  )}
+              </div>
+              
+              <div className="text-sm text-slate-500 pt-2 border-t border-slate-200">
+                  Showing {filteredEquipment.length} of {selectedBuilding.equipment.length} equipment
+              </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+              <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                              <th className="p-4 text-sm font-bold text-slate-600">Equipment</th>
+                              <th className="p-4 text-sm font-bold text-slate-600">Description</th>
+                              <th className="p-4 text-sm font-bold text-slate-600">Room</th>
+                              <th className="p-4 text-sm font-bold text-slate-600">Status</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                          {filteredEquipment.length > 0 ? (
+                              filteredEquipment.map(eq => (
+                                  <tr 
+                                      key={eq.id} 
+                                      className="hover:bg-slate-50 group cursor-pointer" 
+                                      onClick={() => navigate(`/equipment/${eq.id}`)}
+                                  >
+                                      <td className="p-4 font-bold text-slate-700 flex items-center">
+                                          <ChevronRight size={16} className="text-slate-300 mr-2 group-hover:text-brand-600 transition-colors" />
+                                          {eq.Equipment}
+                                      </td>
+                                      <td className="p-4 text-slate-600 max-w-xs lg:max-w-md truncate">{eq.EquipmentDesc || '—'}</td>
+                                      <td className="p-4 text-slate-600">{eq.Room || '—'}</td>
+                                      <td className="p-4">
+                                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                            eq.status === 'OPERATING' ? 'bg-green-100 text-green-700' :
+                                            eq.status === 'REPAIR' ? 'bg-red-100 text-red-700' :
+                                            eq.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600' :
+                                            eq.status === 'ONSHELF' ? 'bg-yellow-100 text-yellow-700' :
+                                            'bg-slate-100 text-slate-500'
+                                          }`}>
+                                              {eq.status || 'UNKNOWN'}
+                                          </span>
+                                      </td>
+                                  </tr>
+                              ))
+                          ) : (
+                              <tr>
+                                  <td colSpan={4} className="p-8 text-center text-slate-400">
+                                      No equipment matches the selected filters
                                   </td>
                               </tr>
                           )}
