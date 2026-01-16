@@ -83,6 +83,33 @@ export const RoomList: React.FC<RoomListProps> = ({
   const locationDropdownRef = useRef<HTMLDivElement>(null);
   const floorDropdownRef = useRef<HTMLDivElement>(null);
   const descriptionDropdownRef = useRef<HTMLDivElement>(null);
+  const SCROLL_KEY = 'roomListScroll';
+  
+  // Restore scroll position when component mounts
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll) {
+      setTimeout(() => {
+        const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
+        if (scrollContainer) {
+          scrollContainer.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
+        }
+      }, 0);
+    }
+  }, []);
+
+  // Save scroll position as user scrolls
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      sessionStorage.setItem(SCROLL_KEY, scrollContainer.scrollTop.toString());
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, []);
   
   // Close dropdowns when clicking outside
   useEffect(() => {

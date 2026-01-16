@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Plus, X } from 'lucide-react';
 import { BuildingData } from '@/types';
@@ -22,6 +22,33 @@ export const BuildingList: React.FC<BuildingListProps> = ({
   
   // Local search state (avoids re-rendering entire App on each keystroke)
   const [searchTerm, setSearchTerm] = useState('');
+  const SCROLL_KEY = 'buildingListScroll';
+  
+  // Restore scroll position when component mounts
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll) {
+      setTimeout(() => {
+        const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
+        if (scrollContainer) {
+          scrollContainer.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
+        }
+      }, 0);
+    }
+  }, []);
+
+  // Save scroll position as user scrolls
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      sessionStorage.setItem(SCROLL_KEY, scrollContainer.scrollTop.toString());
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const filtered = useMemo(() => 
     data.filter(b => fuzzyMatch(

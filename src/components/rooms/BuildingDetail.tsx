@@ -72,6 +72,33 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   const descriptionDropdownRef = useRef<HTMLDivElement>(null);
   const equipmentDescriptionDropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const SCROLL_KEY = `buildingDetailScroll_${code}`;
+  
+  // Restore scroll position when component mounts
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (savedScroll) {
+      setTimeout(() => {
+        const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
+        if (scrollContainer) {
+          scrollContainer.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
+        }
+      }, 100);
+    }
+  }, [code, SCROLL_KEY]);
+
+  // Save scroll position as user scrolls
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      sessionStorage.setItem(SCROLL_KEY, scrollContainer.scrollTop.toString());
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [SCROLL_KEY]);
   
   // Close dropdowns when clicking outside
   useEffect(() => {
