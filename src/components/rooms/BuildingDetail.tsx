@@ -186,7 +186,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   
   // Filtered equipment
   const filteredEquipment = useMemo(() => {
-    return selectedBuilding.equipment.filter(eq => {
+    const filtered = selectedBuilding.equipment.filter(eq => {
       const eqDesc = eq.EquipmentDesc?.trim() || '';
       const eqStatus = eq.status || 'UNKNOWN';
       
@@ -198,6 +198,11 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       
       return descMatch && statusMatch;
     });
+    
+    // Sort alphabetically by Equipment name
+    return filtered.sort((a, b) => 
+      (a.Equipment || '').localeCompare(b.Equipment || '', undefined, { sensitivity: 'base' })
+    );
   }, [selectedBuilding.equipment, selectedEquipmentDescriptions, selectedStatuses]);
   
   // Toggle equipment filter selection

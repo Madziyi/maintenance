@@ -140,8 +140,13 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
 
   const housedEquipment = useMemo(() => {
       if (!selectedBuilding || !selectedRoom) return [];
-      return selectedBuilding.equipment.filter(
+      const equipment = selectedBuilding.equipment.filter(
           eq => eq.Room === selectedRoom.RoomNumber && eq.Location === selectedBuilding.code
+      );
+      
+      // Sort alphabetically by Equipment name
+      return equipment.sort((a, b) => 
+        (a.Equipment || '').localeCompare(b.Equipment || '', undefined, { sensitivity: 'base' })
       );
   }, [selectedBuilding, selectedRoom]);
 
