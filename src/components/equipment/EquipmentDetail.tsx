@@ -354,26 +354,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       {/* Cancel, Save, and Delete buttons at bottom */}
       {canEdit && isEditing && (
         <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 rounded-t-lg shadow-[0_-4px_6px_-1px_rgb(0_0_0_/0.1)] flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
-          <button 
-            onClick={async () => {
-              setIsDeleting(true);
-              try {
-                await onDelete();
-              } finally {
-                setIsDeleting(false);
-              }
-            }}
-            disabled={isUploading || isDeleting}
-            className="flex items-center justify-center px-6 py-2.5 h-10 rounded-md bg-red-600 text-white hover:bg-red-700 text-sm font-medium disabled:opacity-50 transition-colors w-full sm:w-auto"
-          >
-            {isDeleting ? (
-              <RefreshCw size={18} className="mr-2 animate-spin" />
-            ) : (
-              <Trash2 size={18} className="mr-2" />
-            )}
-            {isDeleting ? 'Deleting...' : 'Delete'}
-          </button>
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto order-1 sm:order-2">
             {exists && (
               <button 
                 onClick={() => { setForm(equipment); setIsEditing(false); }} 
@@ -390,6 +371,25 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               {isUploading ? "Saving..." : "Save"}
             </button>
           </div>
+          <button 
+            onClick={async () => {
+              setIsDeleting(true);
+              try {
+                await onDelete();
+              } finally {
+                setIsDeleting(false);
+              }
+            }}
+            disabled={isUploading || isDeleting}
+            className="flex items-center justify-center px-6 py-2.5 h-10 rounded-md bg-red-600 text-white hover:bg-red-700 text-sm font-medium disabled:opacity-50 transition-colors w-full sm:w-auto order-2 sm:order-1"
+          >
+            {isDeleting ? (
+              <RefreshCw size={18} className="mr-2 animate-spin" />
+            ) : (
+              <Trash2 size={18} className="mr-2" />
+            )}
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </button>
         </div>
       )}
     </div>
