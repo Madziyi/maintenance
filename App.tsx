@@ -376,7 +376,7 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex w-64 bg-slate-900 text-white flex-col border-r border-slate-800 z-20">
+      <aside className="hidden md:flex w-64 bg-slate-900 text-white flex-col border-r border-slate-800 z-20 desktop-sidebar">
         <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
            <div className="w-8 h-8 bg-brand-600 rounded-md flex items-center justify-center">
              <MapPin className="text-white" size={18} />
@@ -407,7 +407,7 @@ const App = () => {
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Mobile Header */}
-        <div className="md:hidden bg-brand-900 text-white p-4 flex items-center justify-between shadow-lg z-30">
+        <div className="md:hidden bg-brand-900 text-white p-4 flex items-center justify-between shadow-lg z-30 desktop-header">
           <div className="flex items-center space-x-3">
                <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
                  <MapPin className="text-white" size={18} />
@@ -424,7 +424,7 @@ const App = () => {
 
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden absolute inset-0 z-40 bg-brand-900 text-white p-6">
+          <div className="md:hidden absolute inset-0 z-40 bg-brand-900 text-white p-6 desktop-header-menu">
             <div className="flex flex-col space-y-4">
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Dashboard</button>
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment</button>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info, Upload } from 'lucide-react';
+import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info, Upload, ChevronRight } from 'lucide-react';
 import { BuildingData, Equipment } from '../../../types';
 import { api } from '../../../api';
 import { useToast } from '@/src/components/common/Toast';
@@ -71,6 +71,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
+  const [expandedEquipmentId, setExpandedEquipmentId] = useState<string | null>(null);
   
   // Filter state
   const [showLocationFilter, setShowLocationFilter] = useState(false);
@@ -955,43 +956,103 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
 
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
 
-        {/* Desktop Table View */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left">
+        {/* Desktop Table View with accordion and status pill */}
+        <div className="hidden md:block">
+          <table className="w-full text-left table-fixed">
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
-                <th className="py-3.5 px-6 text-xs font-semibold text-slate-600 uppercase tracking-wider">ID</th>
+                <th className="py-3.5 px-6 text-xs font-semibold text-slate-600 uppercase tracking-wider w-48">Equipment</th>
                 <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Description</th>
-                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Building</th>
-                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Room</th>
-                {/*<th className="py-3.5 px-6 text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>*/}
+                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">Building</th>
+                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider w-32">Room</th>
+                <th className="py-3.5 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayedItems.length > 0 ? (
-                displayedItems.map((e) => (
-                  <tr 
-                    key={e.id} 
-                    onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
-                    className="hover:bg-slate-50 group transition-colors cursor-pointer"
-                  >
-                    <td className="py-3.5 px-6 font-mono text-sm font-medium text-brand-600">{e.Equipment}</td>
-                    <td className="py-3.5 px-4 text-sm text-slate-700 max-w-xs lg:max-w-md truncate">{e.EquipmentDesc || "N/A"}</td>
-                    <td className="py-3.5 px-4 text-sm text-slate-700">{e.Location}</td>
-                    <td className="py-3.5 px-4 text-sm text-slate-700">{e.Room || "-"}</td>
-                    {/*<td className="py-3 pr-6">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        e.status === 'OPERATING' ? 'bg-green-100 text-green-700' :
-                        e.status === 'REPAIR' ? 'bg-red-100 text-red-700' :
-                        e.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600' :
-                        e.status === 'ONSHELF' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-slate-100 text-slate-500'
-                      }`}>
-                        {e.status || 'UNKNOWN'}
-                      </span>
-                    </td>*/}
-                  </tr>
-                ))
+                displayedItems.map((e) => {
+                  const isExpanded = expandedEquipmentId === e.id;
+                  const images = e.images || [];
+
+                  return (
+                    <React.Fragment key={e.id}>
+                      <tr 
+                        onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
+                        className="hover:bg-slate-50 group transition-colors cursor-pointer"
+                      >
+                        <td className="py-3.5 px-6 font-mono text-sm font-medium text-brand-600">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setExpandedEquipmentId(prev => prev === e.id ? null : e.id);
+                              }}
+                              aria-expanded={isExpanded}
+                              className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-500 flex-shrink-0"
+                            >
+                              <ChevronRight
+                                size={16}
+                                className={`transition-transform ${isExpanded ? 'rotate-90 text-brand-600' : 'text-slate-300'}`}
+                              />
+                            </button>
+                            <span className="truncate">{e.Equipment}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.EquipmentDesc || "N/A"}</td>
+                        <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.Location}</td>
+                        <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.Room || "-"}</td>
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
+                              e.status === 'OPERATING'
+                                ? 'bg-green-100 text-green-700 border border-green-200'
+                                : e.status === 'REPAIR'
+                                ? 'bg-red-100 text-red-700 border border-red-200'
+                                : e.status === 'INACTIVE'
+                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                : e.status === 'ONSHELF'
+                                ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+                                : 'bg-slate-100 text-slate-500 border border-slate-200'
+                            }`}
+                          >
+                            {e.status || 'UNKNOWN'}
+                          </span>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-slate-50/60">
+                          <td colSpan={5} className="px-6 pt-1 pb-4">
+                            <div className="text-xs font-semibold text-slate-600 mb-2">
+                              Equipment photos ({images.length})
+                            </div>
+                            {images.length === 0 ? (
+                              <div className="text-sm text-slate-500">
+                                No photos yet for this equipment.
+                              </div>
+                            ) : (
+                              <div className="flex gap-2 overflow-x-auto pb-1">
+                                {images.map((url, idx) => (
+                                  <div
+                                    key={url || idx}
+                                    className="flex-shrink-0"
+                                  >
+                                    <img
+                                      src={url}
+                                      alt={`Equipment ${e.Equipment} ${idx + 1}`}
+                                      loading="lazy"
+                                      className="h-32 w-32 rounded-md object-cover border border-slate-200"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-slate-400">
@@ -1006,38 +1067,100 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
           </table>
         </div>
 
-        {/* Mobile Card View */}
+        {/* Mobile Card View with accordion and status pill */}
         <div className="md:hidden divide-y divide-slate-100">
           {displayedItems.length > 0 ? (
-            displayedItems.map((e) => (
-              <div 
-                key={e.id} 
-                onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
-                className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="font-mono text-sm font-medium text-brand-700">{e.Equipment}</div>
-                  <div className="text-xs text-slate-400 font-medium">{e.Location}</div>
-                </div>
-                <div className="text-sm text-slate-600 mb-2 line-clamp-2">
-                  {e.EquipmentDesc || "N/A"}
-                </div>
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <div>
-                    {e.Room && <><span className="font-medium">Room:</span> {e.Room}</>}
+            displayedItems.map((e) => {
+              const isExpanded = expandedEquipmentId === e.id;
+              const images = e.images || [];
+
+              return (
+                <div 
+                  key={e.id} 
+                  onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
+                  className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-sm font-medium text-brand-700">
+                        {e.Equipment}
+                      </div>
+                      <div className="text-sm text-slate-600 mt-1 line-clamp-2">
+                        {e.EquipmentDesc || "N/A"}
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+                        <span className="truncate">{e.Location}</span>
+                        {e.Room && (
+                          <span className="truncate">
+                            <span className="font-medium">Room:</span> {e.Room}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span
+                        className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
+                          e.status === 'OPERATING'
+                            ? 'bg-green-100 text-green-700 border border-green-200'
+                            : e.status === 'REPAIR'
+                            ? 'bg-red-100 text-red-700 border border-red-200'
+                            : e.status === 'INACTIVE'
+                            ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                            : e.status === 'ONSHELF'
+                            ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}
+                      >
+                        {e.status || 'UNKNOWN'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setExpandedEquipmentId(prev => prev === e.id ? null : e.id);
+                        }}
+                        aria-expanded={isExpanded}
+                        className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-500 flex-shrink-0"
+                      >
+                        <ChevronRight
+                          size={16}
+                          className={`transition-transform ${isExpanded ? 'rotate-90 text-brand-600' : 'text-slate-300'}`}
+                        />
+                      </button>
+                    </div>
                   </div>
-                  {/*<span className={`font-medium px-2 py-0.5 rounded-full ${
-                    e.status === 'OPERATING' ? 'bg-green-100 text-green-700' :
-                    e.status === 'REPAIR' ? 'bg-red-100 text-red-700' :
-                    e.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600' :
-                    e.status === 'ONSHELF' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-slate-100 text-slate-500'
-                  }`}>
-                    {e.status || 'UNKNOWN'}
-                  </span>*/}
+
+                  {isExpanded && (
+                    <div className="mt-3">
+                      <div className="text-xs font-semibold text-slate-600 mb-1.5">
+                        Equipment photos ({images.length})
+                      </div>
+                      {images.length === 0 ? (
+                        <div className="text-xs text-slate-500">
+                          No photos yet for this equipment.
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {images.map((url, idx) => (
+                            <div
+                              key={url || idx}
+                              className="flex-shrink-0"
+                            >
+                              <img
+                                src={url}
+                                alt={`Equipment ${e.Equipment} ${idx + 1}`}
+                                loading="lazy"
+                                className="h-28 w-28 rounded-md object-cover border border-slate-200"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="p-12 text-center text-slate-400">
               {hasActiveFilters || searchTerm 

@@ -1,0 +1,24 @@
+/* Custom responsive behavior for sidebar and header around 975px breakpoint */
+
+/* Between 768px and 974px: hide desktop sidebar, show mobile header/menu */
+@media (min-width: 768px) and (max-width: 974px) {
+  .desktop-sidebar {
+    display: none !important;
+  }
+
+  .desktop-header {
+    display: flex !important;
+  }
+
+  .desktop-header-menu {
+    display: block !important;
+  }
+}
+
+/* At 975px and above: ensure desktop sidebar is visible */
+@media (min-width: 975px) {
+  .desktop-sidebar {
+    display: flex !important;
+  }
+}
+

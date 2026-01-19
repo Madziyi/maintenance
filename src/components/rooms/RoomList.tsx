@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, Building, Layers, FileText, X, Plus, Download } from 'lucide-react';
+import { Search, ChevronDown, Building, Layers, FileText, X, Plus, Download, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BuildingData, MaintenanceRoom } from '@/types';
 import { useToast } from '../common/Toast';
@@ -64,6 +64,7 @@ export const RoomList: React.FC<RoomListProps> = ({
   const [selectedLocations, setSelectedLocations] = useState<string[]>(savedFilterState.selectedLocations);
   const [selectedFloors, setSelectedFloors] = useState<string[]>(savedFilterState.selectedFloors);
   const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>(savedFilterState.selectedDescriptions);
+  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
   
   // Save filter state to sessionStorage whenever filters change
   useEffect(() => {
@@ -836,30 +837,91 @@ export const RoomList: React.FC<RoomListProps> = ({
       {/* Rooms List Table - Part of page scroll */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         {/* Desktop Table View */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left">
+        <div className="hidden md:block">
+          <table className="w-full text-left table-fixed">
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-                <th className="py-3 pl-6">Room #</th>
-                <th className="py-3">Building</th>
-                <th className="py-3">Floor</th>
+                <th className="py-3 pl-6 w-48">Room #</th>
+                <th className="py-3 w-40">Building</th>
+                <th className="py-3 w-32">Floor</th>
                 <th className="py-3 pr-6">Description</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayedItems.length > 0 ? (
-                displayedItems.map((room) => (
-                  <tr 
-                    key={room.id} 
-                    onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
-                    className="hover:bg-slate-50 group transition-colors cursor-pointer"
-                  >
-                    <td className="py-3 pl-6 font-bold text-sm text-slate-700">{room.RoomNumber}</td>
-                    <td className="py-3 text-sm text-slate-600">{getBuildingName(room.Building)} ({room.Building})</td>
-                    <td className="py-3 text-sm text-slate-600">{room.Floor || "—"}</td>
-                    <td className="py-3 text-sm text-slate-600 pr-6 max-w-xs lg:max-w-md truncate">{room.Description || "N/A"}</td>
-                  </tr>
-                ))
+                displayedItems.map((room) => {
+                  const isExpanded = expandedRoomId === room.id;
+                  const images = room.roomImages || [];
+
+                  return (
+                    <React.Fragment key={room.id}>
+                      <tr 
+                        onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
+                        className="hover:bg-slate-50 group transition-colors cursor-pointer"
+                      >
+                        <td className="py-3 pl-6 font-bold text-sm text-slate-700">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedRoomId(prev => prev === room.id ? null : room.id);
+                              }}
+                              aria-expanded={isExpanded}
+                              className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-500 flex-shrink-0"
+                            >
+                              <ChevronRight
+                                size={16}
+                                className={`transition-transform ${isExpanded ? 'rotate-90 text-brand-600' : 'text-slate-300'}`}
+                              />
+                            </button>
+                            <span className="truncate">{room.RoomNumber}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 text-sm text-slate-600 truncate" title={`${getBuildingName(room.Building)} (${room.Building})`}>
+                          {getBuildingName(room.Building)} ({room.Building})
+                        </td>
+                        <td className="py-3 text-sm text-slate-600 truncate">{room.Floor || "—"}</td>
+                        <td className="py-3 text-sm text-slate-600 pr-6 truncate">{room.Description || "N/A"}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-slate-50/60">
+                          <td colSpan={4} className="px-6 pt-1 pb-4">
+                            <div className="text-xs font-semibold text-slate-600 mb-2">
+                              Room photos ({images.length})
+                            </div>
+                            {images.length === 0 ? (
+                              <div className="text-sm text-slate-500">
+                                No photos yet for this room.
+                              </div>
+                            ) : (
+                              <div className="flex gap-2 overflow-x-auto pb-1">
+                                {images.map((url, idx) => (
+                                  <button
+                                    key={url || idx}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/building/${room.Building}/room/${room.id}`);
+                                    }}
+                                    className="flex-shrink-0"
+                                  >
+                                    <img
+                                      src={url}
+                                      alt={`Room ${room.RoomNumber} interior ${idx + 1}`}
+                                      loading="lazy"
+                                      className="h-40 w-40 rounded-md object-cover border border-slate-200"
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={4} className="py-12 text-center text-slate-400">
@@ -877,26 +939,83 @@ export const RoomList: React.FC<RoomListProps> = ({
         {/* Mobile Card View */}
         <div className="md:hidden divide-y divide-slate-100">
           {displayedItems.length > 0 ? (
-            displayedItems.map((room) => (
-              <div 
-                key={room.id} 
-                onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
-                className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="font-bold text-sm text-slate-700">{room.RoomNumber}</div>
-                  <div className="text-xs text-slate-400 font-medium">{room.Building}</div>
-                </div>
-                <div className="text-sm text-slate-600 mb-2 line-clamp-2">
-                  {room.Description || "N/A"}
-                </div>
-                {room.Floor && (
-                  <div className="text-xs text-slate-500">
-                    <span className="font-medium">Floor:</span> {room.Floor}
+            displayedItems.map((room) => {
+              const isExpanded = expandedRoomId === room.id;
+              const images = room.roomImages || [];
+
+              return (
+                <div 
+                  key={room.id} 
+                  onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
+                  className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex-1">
+                      <div className="font-bold text-sm text-slate-700">{room.RoomNumber}</div>
+                      <div className="text-xs text-slate-400 font-medium">
+                        {getBuildingName(room.Building)} ({room.Building})
+                      </div>
+                      <div className="text-sm text-slate-600 mt-1 line-clamp-2">
+                        {room.Description || "N/A"}
+                      </div>
+                      {room.Floor && (
+                        <div className="text-xs text-slate-500 mt-1">
+                          <span className="font-medium">Floor:</span> {room.Floor}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedRoomId(prev => prev === room.id ? null : room.id);
+                      }}
+                      aria-expanded={isExpanded}
+                      className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-500 flex-shrink-0"
+                    >
+                      <ChevronRight
+                        size={16}
+                        className={`transition-transform ${isExpanded ? 'rotate-90 text-brand-600' : 'text-slate-300'}`}
+                      />
+                    </button>
                   </div>
-                )}
-              </div>
-            ))
+
+                  {isExpanded && (
+                    <div className="mt-3">
+                      <div className="text-xs font-semibold text-slate-600 mb-1.5">
+                        Room photos ({images.length})
+                      </div>
+                      {images.length === 0 ? (
+                        <div className="text-xs text-slate-500">
+                          No photos yet for this room.
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {images.map((url, idx) => (
+                            <button
+                              key={url || idx}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/building/${room.Building}/room/${room.id}`);
+                              }}
+                              className="flex-shrink-0"
+                            >
+                              <img
+                                src={url}
+                                alt={`Room ${room.RoomNumber} interior ${idx + 1}`}
+                                loading="lazy"
+                                className="h-32 w-32 rounded-md object-cover border border-slate-200"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           ) : (
             <div className="p-12 text-center text-slate-400">
               {hasActiveFilters || searchTerm 

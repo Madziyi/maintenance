@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import * as Sentry from "@sentry/react";
 import App from './App';
+import './src/layout/responsive.css';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { ToastProvider } from './src/components/common/Toast';
 import { initSentry } from './src/lib/sentry';
