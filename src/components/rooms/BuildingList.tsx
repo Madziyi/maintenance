@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, MapPin, Plus, X } from 'lucide-react';
 import { BuildingData } from '@/types';
 import { fuzzyMatch } from '@/src/utils/fuzzySearch';
@@ -16,39 +16,13 @@ export const BuildingList: React.FC<BuildingListProps> = ({
   canEdit = false,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isAddingBuilding, setIsAddingBuilding] = useState(false);
   const [newBuildingCode, setNewBuildingCode] = useState('');
   const [newBuildingName, setNewBuildingName] = useState('');
   
   // Local search state (avoids re-rendering entire App on each keystroke)
   const [searchTerm, setSearchTerm] = useState('');
-  const SCROLL_KEY = 'buildingListScroll';
-  
-  // Restore scroll position when component mounts
-  useEffect(() => {
-    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
-    if (savedScroll) {
-      setTimeout(() => {
-        const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-        if (scrollContainer) {
-          scrollContainer.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
-        }
-      }, 0);
-    }
-  }, []);
-
-  // Save scroll position as user scrolls
-  useEffect(() => {
-    const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      sessionStorage.setItem(SCROLL_KEY, scrollContainer.scrollTop.toString());
-    };
-
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, []);
 
   const filtered = useMemo(() => 
     data.filter(b => fuzzyMatch(
@@ -131,7 +105,12 @@ export const BuildingList: React.FC<BuildingListProps> = ({
               {filtered.map(b => (
                   <div 
                       key={b.code} 
-                      onClick={() => navigate(`/building/${b.code}`)} 
+                      onClick={() => navigate(`/building/${b.code}`, { 
+                        state: { 
+                          from: `${location.pathname}${location.search}`,
+                          fromKey: location.key
+                        } 
+                      })} 
                       className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md cursor-pointer group hover:border-brand-200 transition-all"
                   >
                        <div className="flex justify-between items-center mb-3">

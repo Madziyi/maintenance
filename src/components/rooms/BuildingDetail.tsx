@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import { useNavigate, useParams, Navigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Building as BuildingIcon, Camera, Plus, ChevronRight, ExternalLink, X, Filter, RefreshCw, Share2, Wrench, Layers, FileText, Info, ChevronDown, Upload, Copy } from 'lucide-react';
 import { BuildingData, Equipment } from '@/types';
 import { MaintenanceRoom } from '@/types';
@@ -25,6 +25,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
 }) => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   
   const selectedBuilding = useMemo(() => {
@@ -76,33 +77,6 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   const descriptionDropdownRef = useRef<HTMLDivElement>(null);
   const equipmentDescriptionDropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
-  const SCROLL_KEY = `buildingDetailScroll_${code}`;
-  
-  // Restore scroll position when component mounts
-  useEffect(() => {
-    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
-    if (savedScroll) {
-      setTimeout(() => {
-        const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-        if (scrollContainer) {
-          scrollContainer.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
-        }
-      }, 100);
-    }
-  }, [code, SCROLL_KEY]);
-
-  // Save scroll position as user scrolls
-  useEffect(() => {
-    const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      sessionStorage.setItem(SCROLL_KEY, scrollContainer.scrollTop.toString());
-    };
-
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, [SCROLL_KEY]);
   
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -349,7 +323,12 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
               setNewRoomNumber('');
               setNewRoomFloor('');
               setNewRoomDescription('');
-              navigate(`/building/${selectedBuilding.code}/room/${savedRoom.id}`);
+              navigate(`/building/${selectedBuilding.code}/room/${savedRoom.id}`, { 
+                state: { 
+                  from: `${location.pathname}${location.search}`,
+                  fromKey: location.key
+                } 
+              });
               showToast("Room created successfully", 'success');
           }
       } catch (error) {
@@ -518,7 +497,25 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-lg border border-slate-200">
               <div className="flex items-center space-x-4">
                   <button 
-                      onClick={() => navigate('/building')} 
+                      onClick={() => {
+                        // Prefer real history back (enables browser-like restoration).
+                        const idx = (typeof window !== 'undefined' && (window.history.state?.idx as number | undefined)) ?? 0;
+                        if (idx > 0) {
+                          navigate(-1);
+                          return;
+                        }
+
+                        const state = location.state as { from?: string; fromKey?: string } | null | undefined;
+                        const from = state?.from;
+                        const fromKey = state?.fromKey;
+
+                        if (from) {
+                          navigate(from, { state: fromKey ? { restoreKey: fromKey } : undefined });
+                          return;
+                        }
+
+                        navigate('/building');
+                      }} 
                       className="p-2 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
                   >
                       <ArrowLeft size={20}/>
@@ -1215,7 +1212,12 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       <React.Fragment key={room.id}>
                                           <tr 
                                               className="hover:bg-slate-50 group cursor-pointer transition-colors" 
-                                              onClick={() => navigate(`/building/${selectedBuilding.code}/room/${room.id}`)}
+                                              onClick={() => navigate(`/building/${selectedBuilding.code}/room/${room.id}`, { 
+                                                state: { 
+                                                  from: `${location.pathname}${location.search}`,
+                                                  fromKey: location.key
+                                                } 
+                                              })}
                                           >
                                               <td className="py-3.5 px-6 font-semibold text-slate-900">
                                                   <div className="flex items-center gap-1.5 min-w-0">
@@ -1298,7 +1300,12 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                           return (
                               <div 
                                   key={room.id}
-                                  onClick={() => navigate(`/building/${selectedBuilding.code}/room/${room.id}`)}
+                                  onClick={() => navigate(`/building/${selectedBuilding.code}/room/${room.id}`, { 
+                                    state: { 
+                                      from: `${location.pathname}${location.search}`,
+                                      fromKey: location.key
+                                    } 
+                                  })}
                                   className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
                               >
                                   <div className="flex items-start justify-between gap-3">
@@ -1570,7 +1577,12 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       <React.Fragment key={eq.id}>
                                           <tr 
                                               className="hover:bg-slate-50 group cursor-pointer transition-colors" 
-                                              onClick={() => navigate(`/equipment/${eq.id}`)}
+                                              onClick={() => navigate(`/equipment/${eq.id}`, { 
+                                                state: { 
+                                                  from: `${location.pathname}${location.search}`,
+                                                  fromKey: location.key
+                                                } 
+                                              })}
                                           >
                                               <td className="py-3.5 px-6 font-semibold text-slate-900">
                                                   <div className="flex items-center gap-1.5 min-w-0">
@@ -1677,7 +1689,12 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                           return (
                               <div 
                                   key={eq.id}
-                                  onClick={() => navigate(`/equipment/${eq.id}`)}
+                                  onClick={() => navigate(`/equipment/${eq.id}`, { 
+                                    state: { 
+                                      from: `${location.pathname}${location.search}`,
+                                      fromKey: location.key
+                                    } 
+                                  })}
                                   className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
                               >
                                   <div className="flex items-start justify-between gap-3">

@@ -138,7 +138,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
     <div key={equipment.id} className="max-w-5xl mx-auto space-y-6 pb-20 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <button onClick={onBack} className="flex items-center text-slate-500 hover:text-brand-600 transition-colors font-medium text-sm">
-          <ArrowLeft size={18} className="mr-1.5" /> Back to List
+          <ArrowLeft size={18} className="mr-1.5" /> Back
         </button>
         <div className="flex space-x-2 self-end sm:self-auto">
           <button

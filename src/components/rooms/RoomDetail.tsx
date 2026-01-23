@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useNavigate, useParams, Navigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Building as BuildingIcon, MapPin, Wrench, Camera, Plus, X, Pencil, ExternalLink, Image as ImageIcon, Map, RefreshCw, ChevronRight, Trash2, Share2, Upload } from 'lucide-react';
 import { BuildingData, MaintenanceRoom } from '@/types';
 import { api } from '@/api';
@@ -75,13 +75,13 @@ const FloorPlanWithMarker: React.FC<{
       <img 
         ref={imgRef}
         src={imageUrl} 
-        className={`w-full h-full object-contain ${isEditing ? 'cursor-crosshair' : 'cursor-zoom-in'}`}
+        className={`w-full h-full object-contain ${
+          isEditing ? 'cursor-pointer' : 'cursor-zoom-in'
+        }`}
         onClick={(e) => {
-          if (isEditing) {
-            onMapClick(e);
-          } else {
-            onFullScreenClick();
-          }
+          // Always call onFullScreenClick - it now handles both edit and view modes
+          e.stopPropagation();
+          onFullScreenClick();
         }}
         alt="Floor Plan"
       />
@@ -127,6 +127,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
 }) => {
   const { code, id } = useParams<{ code: string; id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   
   const selectedBuilding = useMemo(() => {
@@ -166,6 +167,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
   const [expandedEquipmentId, setExpandedEquipmentId] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fullScreenImageRef = useRef<{ imageUrl: string; markerX?: number; markerY?: number; isEditing?: boolean; onMapClick?: (x: number, y: number) => void } | null>(null);
   
   useEffect(() => {
       // Only reset form if we're not editing and the room ID actually changed
@@ -173,6 +175,22 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
           setForm(selectedRoom);
       }
   }, [selectedRoom?.id, isEditing]);
+  
+  // Create a stable callback for map clicks that updates both form and fullscreen state
+  const handleMapClickInFullscreen = useCallback((x: number, y: number) => {
+    // Update the form with new coordinates
+    setForm(prev => ({ ...prev, x, y }));
+    // Also update the fullscreen image state so marker appears in real-time
+    if (fullScreenImageRef.current) {
+      const updated = {
+        ...fullScreenImageRef.current,
+        markerX: x,
+        markerY: y
+      };
+      fullScreenImageRef.current = updated;
+      onSetFullScreenImage(updated);
+    }
+  }, [onSetFullScreenImage]);
   
   const handleSave = async () => {
       if (!canEdit) return;
@@ -328,10 +346,29 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
       <div className="space-y-6 pb-20 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <button 
-                onClick={() => navigate(`/building/${selectedBuilding.code}`)} 
+                onClick={() => {
+                  // Prefer real history back (enables browser-like restoration).
+                  const idx = (typeof window !== 'undefined' && (window.history.state?.idx as number | undefined)) ?? 0;
+                  if (idx > 0) {
+                    navigate(-1);
+                    return;
+                  }
+
+                  const state = location.state as { from?: string; fromKey?: string } | null | undefined;
+                  const from = state?.from;
+                  const fromKey = state?.fromKey;
+
+                  if (from) {
+                    navigate(from, { state: fromKey ? { restoreKey: fromKey } : undefined });
+                    return;
+                  }
+
+                  // Fallback to building
+                  navigate(`/building/${selectedBuilding.code}`);
+                }} 
                 className="flex items-center text-slate-500 hover:text-brand-600 transition-colors font-medium"
             >
-                <ArrowLeft size={20} className="mr-1" /> Back to {selectedBuilding.name}
+                <ArrowLeft size={20} className="mr-1" /> Back
             </button>
             <div className="flex space-x-2 self-end sm:self-auto">
                 <button 
@@ -453,7 +490,12 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                   return (
                                       <div
                                           key={eq.id}
-                                          onClick={() => navigate(`/equipment/${eq.id}`)}
+                                          onClick={() => navigate(`/equipment/${eq.id}`, { 
+                                            state: { 
+                                              from: `${location.pathname}${location.search}`,
+                                              fromKey: location.key
+                                            } 
+                                          })}
                                           className="p-3 rounded-lg border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-colors cursor-pointer"
                                       >
                                           <div className="flex items-start justify-between gap-3">
@@ -544,7 +586,27 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                            )}
                        </div>
                        
-                       <div className="bg-slate-50 border border-slate-200 rounded-lg aspect-video flex items-center justify-center overflow-hidden relative group">
+                       <div 
+                           className={`bg-slate-50 border border-slate-200 rounded-lg aspect-video flex items-center justify-center overflow-hidden relative group ${
+                               isEditing && linkedFloorPlan ? 'cursor-pointer' : ''
+                           }`}
+                           onClick={(e) => {
+                               // In edit mode, clicking the container opens fullscreen
+                               if (isEditing && canEdit && linkedFloorPlan) {
+                                   e.stopPropagation(); // Prevent any parent handlers
+                                   onSetFullScreenImage({
+                                       imageUrl: linkedFloorPlan.imageUrl,
+                                       markerX: form.x !== undefined ? form.x : undefined,
+                                       markerY: form.y !== undefined ? form.y : undefined,
+                                       isEditing: true,
+                                       onMapClick: (x: number, y: number) => {
+                                           // Update the form with new coordinates
+                                           setForm({ ...form, x, y });
+                                       }
+                                   });
+                               }
+                           }}
+                       >
                            {linkedFloorPlan ? (
                                <FloorPlanWithMarker
                                  imageUrl={linkedFloorPlan.imageUrl}
@@ -553,11 +615,28 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                  isEditing={isEditing}
                                  onMapClick={handleMapClick}
                                  onFullScreenClick={() => {
-                                   onSetFullScreenImage({
-                                     imageUrl: linkedFloorPlan.imageUrl,
-                                     markerX: form.x !== undefined ? form.x : undefined,
-                                     markerY: form.y !== undefined ? form.y : undefined
-                                   });
+                                   // Handle both edit and view modes
+                                   if (linkedFloorPlan) {
+                                       if (isEditing && canEdit) {
+                                           // In edit mode, open fullscreen with edit capabilities
+                                           const fullScreenData = {
+                                               imageUrl: linkedFloorPlan.imageUrl,
+                                               markerX: form.x !== undefined ? form.x : undefined,
+                                               markerY: form.y !== undefined ? form.y : undefined,
+                                               isEditing: true,
+                                               onMapClick: handleMapClickInFullscreen
+                                           };
+                                           fullScreenImageRef.current = fullScreenData;
+                                           onSetFullScreenImage(fullScreenData);
+                                       } else {
+                                           // In view mode, just open fullscreen
+                                           onSetFullScreenImage({
+                                               imageUrl: linkedFloorPlan.imageUrl,
+                                               markerX: form.x !== undefined ? form.x : undefined,
+                                               markerY: form.y !== undefined ? form.y : undefined
+                                           });
+                                       }
+                                   }
                                  }}
                                />
                            ) : (

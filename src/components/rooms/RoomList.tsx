@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Search, ChevronDown, Building, Layers, FileText, X, Plus, Download, ChevronRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { BuildingData, MaintenanceRoom } from '@/types';
 import { useToast } from '../common/Toast';
 import { fuzzyMatch } from '@/src/utils/fuzzySearch';
@@ -17,6 +17,7 @@ export const RoomList: React.FC<RoomListProps> = ({
   canEdit,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const allRooms = data.flatMap(b => b.maintenanceRooms);
   
@@ -84,33 +85,6 @@ export const RoomList: React.FC<RoomListProps> = ({
   const locationDropdownRef = useRef<HTMLDivElement>(null);
   const floorDropdownRef = useRef<HTMLDivElement>(null);
   const descriptionDropdownRef = useRef<HTMLDivElement>(null);
-  const SCROLL_KEY = 'roomListScroll';
-  
-  // Restore scroll position when component mounts
-  useEffect(() => {
-    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
-    if (savedScroll) {
-      setTimeout(() => {
-        const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-        if (scrollContainer) {
-          scrollContainer.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
-        }
-      }, 0);
-    }
-  }, []);
-
-  // Save scroll position as user scrolls
-  useEffect(() => {
-    const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      sessionStorage.setItem(SCROLL_KEY, scrollContainer.scrollTop.toString());
-    };
-
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, []);
   
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -392,7 +366,12 @@ export const RoomList: React.FC<RoomListProps> = ({
         setNewRoomNumber('');
         setNewRoomFloor('');
         setNewRoomDescription('');
-        navigate(`/building/${newRoomBuilding}/room/${savedRoom.id}`);
+        navigate(`/building/${newRoomBuilding}/room/${savedRoom.id}`, { 
+          state: { 
+            from: `${location.pathname}${location.search}`,
+            fromKey: location.key
+          } 
+        });
         showToast("Room created successfully", 'success');
       }
     } catch (error) {
@@ -856,7 +835,12 @@ export const RoomList: React.FC<RoomListProps> = ({
                   return (
                     <React.Fragment key={room.id}>
                       <tr 
-                        onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
+                        onClick={() => navigate(`/building/${room.Building}/room/${room.id}`, { 
+                          state: { 
+                            from: `${location.pathname}${location.search}`,
+                            fromKey: location.key
+                          } 
+                        })}
                         className="hover:bg-slate-50 group transition-colors cursor-pointer"
                       >
                         <td className="py-3 pl-6 font-bold text-sm text-slate-700">
@@ -902,7 +886,12 @@ export const RoomList: React.FC<RoomListProps> = ({
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      navigate(`/building/${room.Building}/room/${room.id}`);
+                                      navigate(`/building/${room.Building}/room/${room.id}`, { 
+                                        state: { 
+                                          from: `${location.pathname}${location.search}`,
+                                          fromKey: location.key
+                                        } 
+                                      });
                                     }}
                                     className="flex-shrink-0"
                                   >
@@ -946,7 +935,12 @@ export const RoomList: React.FC<RoomListProps> = ({
               return (
                 <div 
                   key={room.id} 
-                  onClick={() => navigate(`/building/${room.Building}/room/${room.id}`)}
+                  onClick={() => navigate(`/building/${room.Building}/room/${room.id}`, { 
+                    state: { 
+                      from: `${location.pathname}${location.search}`,
+                      fromKey: location.key
+                    } 
+                  })}
                   className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">

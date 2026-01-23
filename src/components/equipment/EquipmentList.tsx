@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info, Upload, ChevronRight } from 'lucide-react';
 import { BuildingData, Equipment } from '../../../types';
 import { api } from '../../../api';
@@ -21,7 +20,6 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   onSaveEquipment,
   canEdit,
 }) => {
-  const navigate = useNavigate();
   const { showToast } = useToast();
   const allEquipment = data.flatMap(b => b.equipment);
   
@@ -105,33 +103,6 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const SCROLL_KEY = 'equipmentListScroll';
-  
-  // Restore scroll position when component mounts
-  useEffect(() => {
-    const savedScroll = sessionStorage.getItem(SCROLL_KEY);
-    if (savedScroll) {
-      setTimeout(() => {
-        const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-        if (scrollContainer) {
-          scrollContainer.scrollTo({ top: parseInt(savedScroll, 10), behavior: 'instant' });
-        }
-      }, 0);
-    }
-  }, []);
-
-  // Save scroll position as user scrolls
-  useEffect(() => {
-    const scrollContainer = document.querySelector('.overflow-y-auto') as HTMLElement;
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      sessionStorage.setItem(SCROLL_KEY, scrollContainer.scrollTop.toString());
-    };
-
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, []);
   
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -502,7 +473,6 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       
       // Navigate to the detail page
       onSelectEquipment(newEq);
-      navigate(`/equipment/${newEq.id}`);
       
       // Reset form
       setIsAddingEquipment(false);
@@ -977,7 +947,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                   return (
                     <React.Fragment key={e.id}>
                       <tr 
-                        onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
+                        onClick={() => { onSelectEquipment(e); }}
                         className="hover:bg-slate-50 group transition-colors cursor-pointer"
                       >
                         <td className="py-3.5 px-6 font-mono text-sm font-medium text-brand-600">
@@ -1077,7 +1047,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
               return (
                 <div 
                   key={e.id} 
-                  onClick={() => { onSelectEquipment(e); navigate(`/equipment/${e.id}`); }}
+                  onClick={() => { onSelectEquipment(e); }}
                   className="p-4 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">

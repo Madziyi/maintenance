@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Routes, 
   Route, 
@@ -47,7 +47,7 @@ import { LoginScreen } from './src/components/auth/LoginScreen';
 import { FullScreenViewer } from './src/components/common/FullScreenViewer';
 import { LoadingScreen } from './src/components/common/LoadingScreen';
 import { SidebarItem } from './src/components/common/SidebarItem';
-import { ScrollToTop } from './src/components/common/ScrollToTop';
+import { ScrollPositionManager } from './src/components/common/ScrollPositionManager';
 import { useToast } from './src/components/common/Toast';
 import * as Sentry from "@sentry/react";
 import { Dashboard } from './src/components/dashboard/Dashboard';
@@ -67,6 +67,7 @@ const App = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -85,6 +86,8 @@ const App = () => {
     imageUrl: string;
     markerX?: number; // Percentage (0-100)
     markerY?: number; // Percentage (0-100)
+    isEditing?: boolean; // Allow editing in full screen
+    onMapClick?: (x: number, y: number) => void; // Callback when clicking to set location
   }
 
   const [fullScreenImage, setFullScreenImage] = useState<FullScreenImageData | null>(null);
@@ -155,9 +158,14 @@ const App = () => {
         navigate(`/building/${building.code}`);
         return;
     }
-    // Found it - Navigate
-    navigate(`/building/${building.code}/room/${room.id}`);
-  }, [data, navigate, showToast]);
+    // Found it - Navigate with referrer state (include current history key for scroll restoration)
+    navigate(`/building/${building.code}/room/${room.id}`, { 
+      state: { 
+        from: `${location.pathname}${location.search}`,
+        fromKey: location.key
+      } 
+    });
+  }, [data, navigate, showToast, location.key, location.pathname, location.search]);
 
   // -- Data Modification Helpers --
 
@@ -435,8 +443,8 @@ const App = () => {
             </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
-          <ScrollToTop />
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+          <ScrollPositionManager scrollContainerRef={scrollContainerRef} />
           <Routes>
             <Route
               path="/login"
@@ -466,7 +474,12 @@ const App = () => {
             <Route path="/equipment" element={
               <EquipmentList 
                 data={data}
-                onSelectEquipment={(eq) => navigate(`/equipment/${eq.id}`)}
+                onSelectEquipment={(eq) => navigate(`/equipment/${eq.id}`, { 
+                  state: { 
+                    from: `${location.pathname}${location.search}`, 
+                    fromKey: location.key 
+                  } 
+                })}
                 onNavigate={(view) => {
                   if (view === 'EQUIPMENT_DETAIL') return;
                   navigate('/equipment');
@@ -535,6 +548,8 @@ const App = () => {
         imageUrl={fullScreenImage?.imageUrl || null} 
         markerX={fullScreenImage?.markerX}
         markerY={fullScreenImage?.markerY}
+        isEditing={fullScreenImage?.isEditing}
+        onMapClick={fullScreenImage?.onMapClick}
         onClose={() => setFullScreenImage(null)} 
       />
     </div>
