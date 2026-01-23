@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigationType } from 'react-router-dom';
 import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info, Upload, ChevronRight } from 'lucide-react';
 import { BuildingData, Equipment } from '../../../types';
 import { api } from '../../../api';
@@ -20,6 +21,8 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   onSaveEquipment,
   canEdit,
 }) => {
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const { showToast } = useToast();
   const allEquipment = data.flatMap(b => b.equipment);
   
@@ -255,14 +258,67 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   // Pagination - limit displayed items for performance
   const ITEMS_PER_PAGE = 50;
   const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
+  const didMountRef = useRef(false);
+  const metaRestoreDoneRef = useRef(false);
   
   // Reset display limit when filters change
   useEffect(() => {
+    // Skip initial mount to avoid clobbering back-restored pagination.
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
     setDisplayLimit(ITEMS_PER_PAGE);
   }, [searchTerm, selectedLocations, selectedRooms, selectedDescriptions, selectedStatuses]);
   
   const displayedItems = useMemo(() => filtered.slice(0, displayLimit), [filtered, displayLimit]);
   const hasMoreItems = filtered.length > displayLimit;
+
+  const restoreKeyFromState = (location.state as { restoreKey?: string } | null | undefined)?.restoreKey;
+  const shouldRestore = navigationType === 'POP' || !!restoreKeyFromState;
+  const keyToRestore = restoreKeyFromState || location.key;
+
+  // Persist pagination (displayLimit) per history entry.
+  useEffect(() => {
+    // Avoid clobbering stored pagination on back navigation before we restore it.
+    if (shouldRestore && !metaRestoreDoneRef.current) return;
+    try {
+      sessionStorage.setItem(`pageMeta:${location.key}`, JSON.stringify({ displayLimit }));
+    } catch {
+      // ignore
+    }
+  }, [displayLimit, location.key]);
+
+  // Restore pagination only on back navigation (browser POP or explicit restoreKey).
+  useEffect(() => {
+    if (!shouldRestore) return;
+    try {
+      const raw = sessionStorage.getItem(`pageMeta:${keyToRestore}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { displayLimit?: number };
+      const savedLimit = typeof parsed.displayLimit === 'number' ? parsed.displayLimit : undefined;
+      if (!savedLimit) return;
+      setDisplayLimit(prev => {
+        const next = Math.max(prev, savedLimit);
+        return Math.min(next, filtered.length || next);
+      });
+      metaRestoreDoneRef.current = true;
+
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/548404a9-c8cb-455b-b674-66bbed331a6b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'C',location:'EquipmentList.tsx:metaRestore',message:'restored displayLimit meta',data:{path:`${location.pathname}${location.search}`,key:location.key,keyToRestore,savedLimit,filtered:filtered.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldRestore, keyToRestore]);
+
+  // #region agent log
+  useEffect(() => {
+    const el = document.querySelector('.overflow-y-auto') as HTMLElement | null;
+    fetch('http://127.0.0.1:7244/ingest/548404a9-c8cb-455b-b674-66bbed331a6b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'C',location:'EquipmentList.tsx:displayLimit',message:'displayLimit state',data:{path:`${location.pathname}${location.search}`,key:location.key,displayLimit,filtered:filtered.length,displayed:displayedItems.length,hasMore:hasMoreItems,scrollTop:el?.scrollTop,scrollHeight:el?.scrollHeight,clientHeight:el?.clientHeight},timestamp:Date.now()})}).catch(()=>{});
+  }, [displayLimit, filtered.length, displayedItems.length, hasMoreItems, location.key, location.pathname, location.search]);
+  // #endregion
 
   // Toggle functions
   const toggleLocation = (code: string) => {
