@@ -266,21 +266,12 @@ export const RoomList: React.FC<RoomListProps> = ({
       });
       metaRestoreDoneRef.current = true;
 
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/548404a9-c8cb-455b-b674-66bbed331a6b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'C',location:'RoomList.tsx:metaRestore',message:'restored displayLimit meta',data:{path:`${location.pathname}${location.search}`,key:location.key,keyToRestore,savedLimit,filtered:filtered.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+
     } catch {
       // ignore
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldRestore, keyToRestore]);
-
-  // #region agent log
-  useEffect(() => {
-    const el = document.querySelector('.overflow-y-auto') as HTMLElement | null;
-    fetch('http://127.0.0.1:7244/ingest/548404a9-c8cb-455b-b674-66bbed331a6b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'C',location:'RoomList.tsx:displayLimit',message:'displayLimit state',data:{path:`${location.pathname}${location.search}`,key:location.key,displayLimit,filtered:filtered.length,displayed:displayedItems.length,hasMore:hasMoreItems,scrollTop:el?.scrollTop,scrollHeight:el?.scrollHeight,clientHeight:el?.clientHeight},timestamp:Date.now()})}).catch(()=>{});
-  }, [displayLimit, filtered.length, displayedItems.length, hasMoreItems, location.key, location.pathname, location.search]);
-  // #endregion
 
   // Toggle functions
   const toggleLocation = (code: string) => {
