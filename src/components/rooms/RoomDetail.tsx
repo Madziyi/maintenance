@@ -163,6 +163,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
+  const [isDragOverImages, setIsDragOverImages] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedEquipmentId, setExpandedEquipmentId] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -225,18 +226,17 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!e.target.files || e.target.files.length === 0) return;
-      
-      const files = Array.from(e.target.files) as File[];
-      const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
-      const inputElement = e.target;
+  const uploadRoomImagesFromFiles = async (files: File[], inputElement?: HTMLInputElement | null) => {
+      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      if (imageFiles.length === 0) return;
+
+      const tempIds = imageFiles.map((_, idx) => `temp-${Date.now()}-${idx}`);
       
       setUploadingImageIds(new Set(tempIds));
       setIsUploadingImage(true);
       
       try {
-          const uploadPromises = files.map(async (file, idx) => {
+          const uploadPromises = imageFiles.map(async (file, idx) => {
               const tempId = tempIds[idx];
               try {
                   const url = await api.uploadFile(file);
@@ -268,16 +268,34 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
       } finally {
           setIsUploadingImage(false);
           setUploadingImageIds(new Set());
-          // Reset the input that was used
-          inputElement.value = '';
-          // Also reset the other input if it exists
-          if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
-              uploadInputRef.current.value = '';
-          }
-          if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
-              cameraInputRef.current.value = '';
+          if (inputElement) {
+              // Reset the input that was used
+              inputElement.value = '';
+              // Also reset the other input if it exists
+              if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
+                  uploadInputRef.current.value = '';
+              }
+              if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
+                  cameraInputRef.current.value = '';
+              }
           }
       }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || e.target.files.length === 0) return;
+      const files = Array.from(e.target.files) as File[];
+      const inputElement = e.target;
+      await uploadRoomImagesFromFiles(files, inputElement);
+  };
+
+  const handleRoomImagesDrop = async (e: React.DragEvent) => {
+      if (!isEditing || !canEdit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOverImages(false);
+      const files = Array.from(e.dataTransfer.files || []) as File[];
+      await uploadRoomImagesFromFiles(files, null);
   };
 
   const handleImageDelete = async (imageUrl: string) => {
@@ -448,6 +466,12 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                               ) : (
                                   <div className="text-lg text-slate-700">{form.Floor}</div>
                               )}
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Access Key</label>
+                              <div className="text-slate-700">
+                                {form.KeyAccess && String(form.KeyAccess).trim() !== '' ? form.KeyAccess : 'Probably DG/DB'}
+                              </div>
                           </div>
                           <div className="md:col-span-2">
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Description</label>
@@ -690,15 +714,24 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                           ))}
                           
                           {isEditing && canEdit && (
-                              <div className="flex gap-2">
-                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                              <div
+                                className="flex gap-2"
+                                onDragOver={(e) => {
+                                  if (!isEditing || !canEdit) return;
+                                  e.preventDefault();
+                                  setIsDragOverImages(true);
+                                }}
+                                onDragLeave={() => setIsDragOverImages(false)}
+                                onDrop={handleRoomImagesDrop}
+                              >
+                                  <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''} ${isDragOverImages ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                                       {isUploadingImage ? (
                                           <RefreshCw className="animate-spin text-slate-400"/>
                                       ) : (
                                           <Upload size={24} className="text-slate-400" />
                                       )}
                                       <span className="text-sm text-slate-500 mt-2">
-                                          {isUploadingImage ? 'Uploading...' : 'Upload Photo'}
+                                          {isUploadingImage ? 'Uploading...' : 'Upload/Drag & Drop'}
                                       </span>
                                       <input 
                                           ref={uploadInputRef}
@@ -710,7 +743,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                           disabled={isUploadingImage}
                                       />
                                   </label>
-                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''} ${isDragOverImages ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                                       {isUploadingImage ? (
                                           <RefreshCw className="animate-spin text-slate-400"/>
                                       ) : (

@@ -53,6 +53,8 @@ import * as Sentry from "@sentry/react";
 import { Dashboard } from './src/components/dashboard/Dashboard';
 import { EquipmentList } from './src/components/equipment/EquipmentList';
 import { EquipmentDetailRoute } from './src/components/equipment/EquipmentDetailRoute';
+import { EquipmentReviewHome } from './src/components/equipment/EquipmentReviewHome';
+import { EquipmentReviewPage } from './src/components/equipment/EquipmentReviewPage';
 import { BuildingList } from './src/components/rooms/BuildingList';
 import { BuildingDetail } from './src/components/rooms/BuildingDetail';
 import { RoomDetail } from './src/components/rooms/RoomDetail';
@@ -68,6 +70,9 @@ const App = () => {
   const location = useLocation();
   const { showToast } = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isReviewFullScreen =
+    location.pathname.startsWith('/equipment-review') &&
+    new URLSearchParams(location.search).get('fs') === '1';
 
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -384,6 +389,7 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
       {/* Sidebar - Desktop */}
+      {!isReviewFullScreen && (
       <aside className="hidden md:flex w-64 bg-slate-900 text-white flex-col border-r border-slate-800 z-20 desktop-sidebar">
         <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
            <div className="w-8 h-8 bg-brand-600 rounded-md flex items-center justify-center">
@@ -394,9 +400,15 @@ const App = () => {
         
         <nav className="flex-1 py-4 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} onClick={() => navigate('/')} />
-          <SidebarItem icon={Wrench} label="Equipment" active={location.pathname.startsWith('/equipment')} onClick={() => navigate('/equipment')} />
           <SidebarItem icon={BuildingIcon} label="Buildings" active={location.pathname.startsWith('/building') && !location.pathname.startsWith('/rooms')} onClick={() => navigate('/building')} />
-          <SidebarItem icon={MapPin} label="All Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
+          <SidebarItem
+            icon={Wrench}
+            label="Equipment"
+            active={location.pathname.startsWith('/equipment') && !location.pathname.startsWith('/equipment-review')}
+            onClick={() => navigate('/equipment')}
+          />
+          <SidebarItem icon={Check} label="Equipment Review" active={location.pathname.startsWith('/equipment-review')} onClick={() => navigate('/equipment-review')} />
+          <SidebarItem icon={MapPin} label="Equipment Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
         </nav>
 
         <div className="p-6 border-t border-slate-800 space-y-3">
@@ -411,6 +423,7 @@ const App = () => {
             <p className="text-slate-400 text-xs text-center">&copy; 2026 WayFinder v1.0</p>
         </div>
       </aside>
+      )}
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
@@ -435,9 +448,10 @@ const App = () => {
           <div className="md:hidden absolute inset-0 z-40 bg-brand-900 text-white p-6 desktop-header-menu">
             <div className="flex flex-col space-y-4">
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Dashboard</button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment</button>
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/building'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Buildings</button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/rooms'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">All Rooms</button>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment</button>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment-review'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment Review</button>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/rooms'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment Rooms</button>
               <button onClick={handleLogout} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg">Logout</button>
                 </div>
             </div>
@@ -496,6 +510,21 @@ const App = () => {
                 onSetFullScreenImage={handleSetFullScreenImage}
                 onDelete={deleteEquipment}
                 canEdit={isAuthenticated}
+              />
+            } />
+            <Route path="/equipment-review" element={<EquipmentReviewHome data={data} />} />
+            <Route path="/equipment-review/latest" element={
+              <EquipmentReviewPage
+                data={data}
+                canEdit={isAuthenticated}
+                onSetFullScreenImage={(url) => handleSetFullScreenImage(url)}
+              />
+            } />
+            <Route path="/equipment-review/building/:code" element={
+              <EquipmentReviewPage
+                data={data}
+                canEdit={isAuthenticated}
+                onSetFullScreenImage={(url) => handleSetFullScreenImage(url)}
               />
             } />
             <Route path="/building" element={

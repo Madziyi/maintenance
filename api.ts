@@ -89,6 +89,95 @@ export const api = {
     });
   },
 
+  // Equipment Review APIs
+  getEquipmentReviewLatest: async (params?: { sort?: 'updated' | 'created'; limit?: number }): Promise<Equipment[]> => {
+    return withSentryTracking("API: getEquipmentReviewLatest", async () => {
+      const sort = params?.sort || 'updated';
+      const limit = params?.limit ?? 50;
+      const qs = new URLSearchParams();
+      qs.set('sort', sort);
+      qs.set('limit', String(limit));
+      const res = await fetch(`${API_URL}/api/equipment-review/latest?${qs.toString()}`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/equipment-review/latest:", text);
+        const error = new Error(`Failed to fetch review latest: ${text}`);
+        trackApiError('/api/equipment-review/latest', res.status, text, error);
+        throw error;
+      }
+      const data = await res.json();
+      return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
+  getEquipmentReviewBuilding: async (
+    buildingCode: string,
+    params?: { sort?: 'updated' | 'created'; mode?: 'needs' | 'all' }
+  ): Promise<Equipment[]> => {
+    return withSentryTracking("API: getEquipmentReviewBuilding", async () => {
+      const sort = params?.sort || 'updated';
+      const mode = params?.mode || 'needs';
+      const qs = new URLSearchParams();
+      qs.set('sort', sort);
+      qs.set('mode', mode);
+      const res = await fetch(`${API_URL}/api/equipment-review/building/${encodeURIComponent(buildingCode)}?${qs.toString()}`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/equipment-review/building:", text);
+        const error = new Error(`Failed to fetch review building: ${text}`);
+        trackApiError('/api/equipment-review/building', res.status, text, error);
+        throw error;
+      }
+      const data = await res.json();
+      return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
+  bulkUpdateEquipmentReview: async (
+    updates: Array<
+      Pick<Equipment, 'id'> &
+        Partial<
+          Pick<Equipment, 'Equipment' | 'EquipmentDesc' | 'Room' | 'Notes' | 'Manufacturer' | 'SerialNum' | 'Vendor' | 'status'>
+        >
+    >
+  ): Promise<Equipment[]> => {
+    return withSentryTracking("API: bulkUpdateEquipmentReview", async () => {
+      const res = await fetch(`${API_URL}/api/equipment-review/bulk-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/equipment-review/bulk-update:", text);
+        const error = new Error(`Failed to bulk update review: ${text}`);
+        trackApiError('/api/equipment-review/bulk-update', res.status, text, error);
+        throw error;
+      }
+      const data = await res.json();
+      return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
+  approveEquipmentReview: async (params: { id?: string; ids?: string[]; reviewedBy?: string | null }): Promise<Equipment[]> => {
+    return withSentryTracking("API: approveEquipmentReview", async () => {
+      const res = await fetch(`${API_URL}/api/equipment-review/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/equipment-review/approve:", text);
+        const error = new Error(`Failed to approve review: ${text}`);
+        trackApiError('/api/equipment-review/approve', res.status, text, error);
+        throw error;
+      }
+      const data = await res.json();
+      return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
   saveRoom: async (room: MaintenanceRoom): Promise<MaintenanceRoom> => {
     return withSentryTracking("API: saveRoom", async () => {
       const res = await fetch(`${API_URL}/api/rooms`, {

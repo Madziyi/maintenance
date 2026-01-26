@@ -242,7 +242,7 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
                           <div className="flex gap-2">
                               <label className={`flex-1 py-2 rounded text-white font-medium text-sm cursor-pointer flex items-center justify-center ${newPlanName && !uploadingPlan ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-300 cursor-not-allowed'}`}>
                                   {uploadingPlan ? <RefreshCw className="animate-spin mr-2"/> : <Upload size={16} className="mr-2"/>}
-                                  {uploadingPlan ? 'Uploading...' : 'Upload Photo'}
+                                  {uploadingPlan ? 'Uploading...' : 'Upload/Drag & Drop'}
                                   <input type="file" className="hidden" accept="image/*" disabled={!newPlanName || uploadingPlan} onChange={handleUpload}/>
                               </label>
                               <label className={`flex-1 py-2 rounded text-white font-medium text-sm cursor-pointer flex items-center justify-center ${newPlanName && !uploadingPlan ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-300 cursor-not-allowed'}`}>

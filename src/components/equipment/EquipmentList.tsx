@@ -72,6 +72,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
+  const [isDragOverNewEquipmentPhotos, setIsDragOverNewEquipmentPhotos] = useState(false);
   const [expandedEquipmentId, setExpandedEquipmentId] = useState<string | null>(null);
   
   // Filter state
@@ -287,7 +288,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     } catch {
       // ignore
     }
-  }, [displayLimit, location.key]);
+  }, [displayLimit, location.key, shouldRestore]);
 
   // Restore pagination only on back navigation (browser POP or explicit restoreKey).
   useEffect(() => {
@@ -303,22 +304,13 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
         return Math.min(next, filtered.length || next);
       });
       metaRestoreDoneRef.current = true;
-
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/548404a9-c8cb-455b-b674-66bbed331a6b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'C',location:'EquipmentList.tsx:metaRestore',message:'restored displayLimit meta',data:{path:`${location.pathname}${location.search}`,key:location.key,keyToRestore,savedLimit,filtered:filtered.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     } catch {
       // ignore
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldRestore, keyToRestore]);
 
-  // #region agent log
-  useEffect(() => {
-    const el = document.querySelector('.overflow-y-auto') as HTMLElement | null;
-    fetch('http://127.0.0.1:7244/ingest/548404a9-c8cb-455b-b674-66bbed331a6b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'C',location:'EquipmentList.tsx:displayLimit',message:'displayLimit state',data:{path:`${location.pathname}${location.search}`,key:location.key,displayLimit,filtered:filtered.length,displayed:displayedItems.length,hasMore:hasMoreItems,scrollTop:el?.scrollTop,scrollHeight:el?.scrollHeight,clientHeight:el?.clientHeight},timestamp:Date.now()})}).catch(()=>{});
-  }, [displayLimit, filtered.length, displayedItems.length, hasMoreItems, location.key, location.pathname, location.search]);
-  // #endregion
+
 
   // Toggle functions
   const toggleLocation = (code: string) => {
@@ -428,19 +420,18 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     }
   }, [newEquipmentLocation, isAddingEquipment]);
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    
-    const files: File[] = Array.from(e.target.files);
-    const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
-    const inputElement = e.target;
+  const uploadNewEquipmentPhotosFromFiles = async (files: File[], inputElement?: HTMLInputElement | null) => {
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    const tempIds = imageFiles.map((_, idx) => `temp-${Date.now()}-${idx}`);
     
     // Mark all as uploading
     setUploadingImageIds(new Set(tempIds));
     setIsUploadingImages(true);
     
     try {
-      const uploadPromises = files.map(async (file, idx) => {
+      const uploadPromises = imageFiles.map(async (file, idx) => {
         const tempId = tempIds[idx];
         try {
           const url = await api.uploadFile(file);
@@ -470,15 +461,33 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       setIsUploadingImages(false);
       setUploadingImageIds(new Set());
       // Reset the input that was used
-      inputElement.value = '';
-      // Also reset the other input if it exists
-      if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
-        uploadInputRef.current.value = '';
-      }
-      if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
-        cameraInputRef.current.value = '';
+      if (inputElement) {
+        inputElement.value = '';
+        // Also reset the other input if it exists
+        if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
+          uploadInputRef.current.value = '';
+        }
+        if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
+          cameraInputRef.current.value = '';
+        }
       }
     }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const files: File[] = Array.from(e.target.files);
+    const inputElement = e.target;
+    await uploadNewEquipmentPhotosFromFiles(files, inputElement);
+  };
+
+  const handleNewEquipmentPhotosDrop = async (e: React.DragEvent) => {
+    if (!canEdit || !isAddingEquipment) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverNewEquipmentPhotos(false);
+    const files = Array.from(e.dataTransfer.files || []) as File[];
+    await uploadNewEquipmentPhotosFromFiles(files, null);
   };
 
   const handlePhotoDelete = async (imageUrl: string) => {
@@ -1414,9 +1423,18 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                   </div>
                 )}
                 
-                {/* Upload Buttons */}
-                <div className="flex gap-2">
-                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                {/* Upload Buttons + drag & drop */}
+                <div
+                  className="flex gap-2"
+                  onDragOver={(e) => {
+                    if (!canEdit || !isAddingEquipment) return;
+                    e.preventDefault();
+                    setIsDragOverNewEquipmentPhotos(true);
+                  }}
+                  onDragLeave={() => setIsDragOverNewEquipmentPhotos(false)}
+                  onDrop={handleNewEquipmentPhotosDrop}
+                >
+                  <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''} ${isDragOverNewEquipmentPhotos ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                     {isUploadingImages ? (
                       <>
                         <RefreshCw className="animate-spin text-slate-400" size={24} />
@@ -1425,7 +1443,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                     ) : (
                       <>
                         <Upload size={24} className="text-slate-400" />
-                        <span className="text-sm text-slate-500 mt-2">Upload Photo</span>
+                        <span className="text-sm text-slate-500 mt-2">Upload/Drag & Drop</span>
                       </>
                     )}
                     <input 
@@ -1438,7 +1456,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                       disabled={isUploadingImages}
                     />
                   </label>
-                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''} ${isDragOverNewEquipmentPhotos ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                     {isUploadingImages ? (
                       <>
                         <RefreshCw className="animate-spin text-slate-400" size={24} />

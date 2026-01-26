@@ -53,6 +53,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   const [isSavingEquipment, setIsSavingEquipment] = useState(false);
   const [isUploadingEquipmentImages, setIsUploadingEquipmentImages] = useState(false);
   const [uploadingEquipmentImageIds, setUploadingEquipmentImageIds] = useState<Set<string>>(new Set());
+  const [isDragOverEquipmentImages, setIsDragOverEquipmentImages] = useState(false);
   const equipmentUploadInputRef = useRef<HTMLInputElement>(null);
   const equipmentCameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -418,18 +419,17 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       setUploadingEquipmentImageIds(new Set());
   };
 
-  const handleEquipmentPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!e.target.files || e.target.files.length === 0) return;
-      
-      const files: File[] = Array.from(e.target.files);
-      const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
-      const inputElement = e.target;
+  const uploadEquipmentPhotosFromFiles = async (files: File[], inputElement?: HTMLInputElement | null) => {
+      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      if (imageFiles.length === 0) return;
+
+      const tempIds = imageFiles.map((_, idx) => `temp-${Date.now()}-${idx}`);
       
       setUploadingEquipmentImageIds(new Set(tempIds));
       setIsUploadingEquipmentImages(true);
       
       try {
-          const uploadPromises = files.map(async (file, idx) => {
+          const uploadPromises = imageFiles.map(async (file, idx) => {
               const tempId = tempIds[idx];
               try {
                   const url = await api.uploadFile(file);
@@ -456,14 +456,32 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       } finally {
           setIsUploadingEquipmentImages(false);
           setUploadingEquipmentImageIds(new Set());
-          inputElement.value = '';
-          if (equipmentUploadInputRef.current && inputElement !== equipmentUploadInputRef.current) {
-              equipmentUploadInputRef.current.value = '';
-          }
-          if (equipmentCameraInputRef.current && inputElement !== equipmentCameraInputRef.current) {
-              equipmentCameraInputRef.current.value = '';
+          if (inputElement) {
+              inputElement.value = '';
+              if (equipmentUploadInputRef.current && inputElement !== equipmentUploadInputRef.current) {
+                  equipmentUploadInputRef.current.value = '';
+              }
+              if (equipmentCameraInputRef.current && inputElement !== equipmentCameraInputRef.current) {
+                  equipmentCameraInputRef.current.value = '';
+              }
           }
       }
+  };
+
+  const handleEquipmentPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || e.target.files.length === 0) return;
+      const files: File[] = Array.from(e.target.files);
+      const inputElement = e.target;
+      await uploadEquipmentPhotosFromFiles(files, inputElement);
+  };
+
+  const handleEquipmentPhotosDrop = async (e: React.DragEvent) => {
+      if (!canEdit || !isAddingEquipment) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOverEquipmentImages(false);
+      const files = Array.from(e.dataTransfer.files || []) as File[];
+      await uploadEquipmentPhotosFromFiles(files, null);
   };
 
   const handleEquipmentPhotoDelete = async (imageUrl: string) => {
@@ -829,9 +847,18 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                   </div>
                               )}
                               
-                              {/* Upload Buttons */}
-                              <div className="flex gap-2">
-                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingEquipmentImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                              {/* Upload Buttons + drag & drop */}
+                              <div
+                                className="flex gap-2"
+                                onDragOver={(e) => {
+                                  if (!canEdit || !isAddingEquipment) return;
+                                  e.preventDefault();
+                                  setIsDragOverEquipmentImages(true);
+                                }}
+                                onDragLeave={() => setIsDragOverEquipmentImages(false)}
+                                onDrop={handleEquipmentPhotosDrop}
+                              >
+                                  <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingEquipmentImages ? 'opacity-50 pointer-events-none' : ''} ${isDragOverEquipmentImages ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                                       {isUploadingEquipmentImages ? (
                                           <>
                                               <RefreshCw className="animate-spin text-slate-400" size={24} />
@@ -840,7 +867,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       ) : (
                                           <>
                                               <Upload size={24} className="text-slate-400" />
-                                              <span className="text-sm text-slate-500 mt-2">Upload Photo</span>
+                                              <span className="text-sm text-slate-500 mt-2">Upload/Drag & Drop</span>
                                           </>
                                       )}
                                       <input 
@@ -853,7 +880,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                           disabled={isUploadingEquipmentImages}
                                       />
                                   </label>
-                                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingEquipmentImages ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingEquipmentImages ? 'opacity-50 pointer-events-none' : ''} ${isDragOverEquipmentImages ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                                       {isUploadingEquipmentImages ? (
                                           <>
                                               <RefreshCw className="animate-spin text-slate-400" size={24} />

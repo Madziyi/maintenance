@@ -34,6 +34,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDragOverPhotos, setIsDragOverPhotos] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -65,19 +66,18 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
     }
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    
-    const files = Array.from(e.target.files) as File[];
-    const tempIds = files.map((_, idx) => `temp-${Date.now()}-${idx}`);
-    const inputElement = e.target;
+  const uploadPhotosFromFiles = async (files: File[], inputElement?: HTMLInputElement | null) => {
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    const tempIds = imageFiles.map((_, idx) => `temp-${Date.now()}-${idx}`);
     
     // Mark all as uploading
     setUploadingImageIds(new Set(tempIds));
     setIsUploading(true);
     
     try {
-      const uploadPromises = files.map(async (file, idx) => {
+      const uploadPromises = imageFiles.map(async (file, idx) => {
         const tempId = tempIds[idx];
         try {
           const url = await api.uploadFile(file);
@@ -110,15 +110,33 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
       setIsUploading(false);
       setUploadingImageIds(new Set());
       // Reset the input that was used
-      inputElement.value = '';
-      // Also reset the other input if it exists
-      if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
-        uploadInputRef.current.value = '';
-      }
-      if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
-        cameraInputRef.current.value = '';
+      if (inputElement) {
+        inputElement.value = '';
+        // Also reset the other input if it exists
+        if (uploadInputRef.current && inputElement !== uploadInputRef.current) {
+          uploadInputRef.current.value = '';
+        }
+        if (cameraInputRef.current && inputElement !== cameraInputRef.current) {
+          cameraInputRef.current.value = '';
+        }
       }
     }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const files = Array.from(e.target.files) as File[];
+    const inputElement = e.target;
+    await uploadPhotosFromFiles(files, inputElement);
+  };
+
+  const handlePhotosDrop = async (e: React.DragEvent) => {
+    if (!isEditing || !canEdit) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverPhotos(false);
+    const files = Array.from(e.dataTransfer.files || []) as File[];
+    await uploadPhotosFromFiles(files, null);
   };
 
   const handlePhotoDelete = async (imageUrl: string) => {
@@ -298,8 +316,21 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               ))}
               
               {isEditing && (
-                <div className="flex gap-2">
-                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div
+                  className="flex gap-2"
+                  onDragOver={(e) => {
+                    if (!isEditing || !canEdit) return;
+                    e.preventDefault();
+                    setIsDragOverPhotos(true);
+                  }}
+                  onDragLeave={() => setIsDragOverPhotos(false)}
+                  onDrop={handlePhotosDrop}
+                >
+                  <label
+                    className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${
+                      isUploading ? 'opacity-50 pointer-events-none' : ''
+                    } ${isDragOverPhotos ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}
+                  >
                     {isUploading ? (
                       <>
                         <RefreshCw className="animate-spin text-slate-400" size={24} />
@@ -308,7 +339,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                     ) : (
                       <>
                         <Upload size={24} className="text-slate-400" />
-                        <span className="text-sm text-slate-500 mt-2">Upload Photo</span>
+                        <span className="text-sm text-slate-500 mt-2">Upload/Drag & Drop</span>
                       </>
                     )}
                     <input 
@@ -321,7 +352,11 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                       disabled={isUploading}
                     />
                   </label>
-                  <label className={`flex-1 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <label
+                    className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${
+                      isUploading ? 'opacity-50 pointer-events-none' : ''
+                    } ${isDragOverPhotos ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}
+                  >
                     {isUploading ? (
                       <>
                         <RefreshCw className="animate-spin text-slate-400" size={24} />

@@ -24,6 +24,75 @@ function safeJSONParse(value, fallback = []) {
   }
 }
 
+// ISO timestamp in UTC (sortable as TEXT)
+function isoNow() {
+  return new Date().toISOString();
+}
+
+let equipmentReviewSchemaEnsured = false;
+
+async function ensureEquipmentReviewSchema(db) {
+  if (equipmentReviewSchemaEnsured) return;
+
+  try {
+    const info = await db.prepare("PRAGMA table_info('Equipment')").all();
+    const cols = new Set((info?.results || []).map(r => r.name));
+
+    const maybeAddColumn = async (name, type) => {
+      if (cols.has(name)) return;
+      await db.prepare(`ALTER TABLE Equipment ADD COLUMN ${name} ${type}`).run();
+      cols.add(name);
+    };
+
+    await maybeAddColumn('createdAt', 'TEXT');
+    await maybeAddColumn('updatedAt', 'TEXT');
+    await maybeAddColumn('reviewedAt', 'TEXT');
+    await maybeAddColumn('reviewedBy', 'TEXT');
+
+    // Backfill timestamps for existing rows (best-effort).
+    await db.prepare(
+      "UPDATE Equipment SET createdAt = COALESCE(createdAt, ?), updatedAt = COALESCE(updatedAt, ?) WHERE createdAt IS NULL OR updatedAt IS NULL"
+    ).bind(isoNow(), isoNow()).run();
+
+    // Helpful indexes for review queries.
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_equipment_reviewed_updated ON Equipment(reviewedAt, updatedAt)").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_equipment_location_updated ON Equipment(Location, updatedAt)").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_equipment_location_created ON Equipment(Location, createdAt)").run();
+  } catch (e) {
+    // Don't block app startup if schema tweaks fail; review endpoints will surface errors.
+    console.warn("ensureEquipmentReviewSchema failed:", e?.message || String(e));
+  } finally {
+    equipmentReviewSchemaEnsured = true;
+  }
+}
+
+function mapEquipmentRowToApi(row) {
+  const images = safeJSONParse(row.Images, []);
+  return {
+    id: String(row.id),
+    Equipment: row.Name || 'Unnamed Equipment',
+    EquipmentDesc: row.Description || '',
+    Notes: row.Notes || '',
+    Location: row.Location || '',
+    LocationDesc: row.BuildingName || row.LocationDesc || '',
+    Room: row.Room_Raw || '',
+    KeyAccess: row.KeyAccess || '',
+    AssetTag: '',
+    SerialNum: row.Serial_Num || '',
+    Manufacturer: row.Manufacturer || '',
+    Model: '',
+    Vendor: row.Vendor || '',
+    PurchaseDate: '',
+    WarrantyDate: '',
+    images: Array.isArray(images) ? images : [],
+    status: row.Status || 'UNKNOWN',
+    createdAt: row.createdAt || null,
+    updatedAt: row.updatedAt || null,
+    reviewedAt: row.reviewedAt || null,
+    reviewedBy: row.reviewedBy || null,
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -45,6 +114,11 @@ export default {
       if (url.pathname === '/api/health') {
         if (!env.DB) return new Response("DB binding missing", { status: 500, headers: corsHeaders });
         return new Response('OK', { headers: corsHeaders });
+      }
+
+      // Ensure review schema is present (best-effort, once per worker instance).
+      if (env.DB) {
+        await ensureEquipmentReviewSchema(env.DB);
       }
 
       // --- GET AGGREGATED DATA ---
@@ -132,6 +206,7 @@ export default {
                     RoomNumber: r.Room_Num || 'N/A',
                     Description: r.Description || '',
                     Floor: r.Floor || '',
+                    KeyAccess: r.Access_Key || null,
                     floorPlanId: linkedFP ? linkedFP.id : undefined,
                     x: r.X_Coordinate,
                     y: r.Y_Coordinate,
@@ -172,7 +247,11 @@ export default {
                     PurchaseDate: '',
                     WarrantyDate: '',
                     images: Array.isArray(images) ? images : [],
-                    status: e.Status || 'UNKNOWN'
+                    status: e.Status || 'UNKNOWN',
+                    createdAt: e.createdAt || null,
+                    updatedAt: e.updatedAt || null,
+                    reviewedAt: e.reviewedAt || null,
+                    reviewedBy: e.reviewedBy || null
                 });
             }
         }
@@ -253,28 +332,186 @@ export default {
           const imagesJson = JSON.stringify(e.images || []);
           
           const isNew = isNaN(Number(e.id));
+          const now = isoNow();
           
           let result;
           if (isNew) {
               result = await env.DB.prepare(`
-                INSERT INTO Equipment (Name, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
-              `).bind(e.Equipment, e.EquipmentDesc, e.Location, e.Room, e.Notes, e.SerialNum, e.Manufacturer, e.Vendor, imagesJson, e.status || 'UNKNOWN').first();
+                INSERT INTO Equipment (Name, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status, createdAt, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+              `).bind(
+                e.Equipment,
+                e.EquipmentDesc,
+                e.Location,
+                e.Room,
+                e.Notes,
+                e.SerialNum,
+                e.Manufacturer,
+                e.Vendor,
+                imagesJson,
+                e.status || 'UNKNOWN',
+                now,
+                now
+              ).first();
           } else {
               result = await env.DB.prepare(`
                 UPDATE Equipment SET 
-                Name=?, Description=?, Location=?, Room_Raw=?, Notes=?, Serial_Num=?, Manufacturer=?, Vendor=?, Images=?, Status=?
+                Name=?, Description=?, Location=?, Room_Raw=?, Notes=?, Serial_Num=?, Manufacturer=?, Vendor=?, Images=?, Status=?, updatedAt=?
                 WHERE id=? RETURNING *
-              `).bind(e.Equipment, e.EquipmentDesc, e.Location, e.Room, e.Notes, e.SerialNum, e.Manufacturer, e.Vendor, imagesJson, e.status || 'UNKNOWN', e.id).first();
+              `).bind(
+                e.Equipment,
+                e.EquipmentDesc,
+                e.Location,
+                e.Room,
+                e.Notes,
+                e.SerialNum,
+                e.Manufacturer,
+                e.Vendor,
+                imagesJson,
+                e.status || 'UNKNOWN',
+                now,
+                e.id
+              ).first();
           }
           
           if (!result) throw new Error("Failed to save equipment: DB returned no result.");
 
           const mapped = {
               ...e,
-              id: String(result.id)
+              id: String(result.id),
+              createdAt: result.createdAt || null,
+              updatedAt: result.updatedAt || null,
+              reviewedAt: result.reviewedAt || null,
+              reviewedBy: result.reviewedBy || null
           };
           return Response.json(mapped, { headers: corsHeaders });
+      }
+
+      // --- EQUIPMENT REVIEW: LATEST QUEUE (needs review) ---
+      if (url.pathname === '/api/equipment-review/latest' && method === 'GET') {
+          if (!env.DB) throw new Error("DB binding not found on env");
+          const sortRaw = (url.searchParams.get('sort') || '').toLowerCase();
+          const sort = sortRaw === 'created' ? 'created' : 'updated';
+          const orderCol = sort === 'created' ? 'createdAt' : 'updatedAt';
+          const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get('limit') || '50', 10) || 50));
+
+          const res = await env.DB.prepare(
+              `SELECT e.*, b.Building as BuildingName
+               FROM Equipment e
+               LEFT JOIN Buildings b ON b.Location = e.Location
+               WHERE (e.reviewedAt IS NULL OR COALESCE(e.updatedAt,'') > COALESCE(e.reviewedAt,''))
+               ORDER BY COALESCE(e.${orderCol}, '') DESC
+               LIMIT ?`
+          ).bind(limit).all();
+
+          const items = (res?.results || []).map(mapEquipmentRowToApi);
+          return Response.json({ items }, { headers: corsHeaders });
+      }
+
+      // --- EQUIPMENT REVIEW: BUILDING QUEUE (needs review) ---
+      if (url.pathname.startsWith('/api/equipment-review/building/') && method === 'GET') {
+          if (!env.DB) throw new Error("DB binding not found on env");
+          const buildingCode = decodeURIComponent(url.pathname.split('/').pop() || '').trim();
+          if (!buildingCode) {
+              return Response.json({ error: 'Building code is required' }, { status: 400, headers: corsHeaders });
+          }
+          const sortRaw = (url.searchParams.get('sort') || '').toLowerCase();
+          const sort = sortRaw === 'created' ? 'created' : 'updated';
+          const orderCol = sort === 'created' ? 'createdAt' : 'updatedAt';
+          const modeRaw = (url.searchParams.get('mode') || '').toLowerCase();
+          const mode = modeRaw === 'all' ? 'all' : 'needs';
+
+          const res = await env.DB.prepare(
+              `SELECT e.*, b.Building as BuildingName,
+                      CASE
+                        WHEN e.reviewedAt IS NULL THEN 1
+                        WHEN COALESCE(e.updatedAt,'') > COALESCE(e.reviewedAt,'') THEN 1
+                        ELSE 0
+                      END as needsReview
+               FROM Equipment e
+               LEFT JOIN Buildings b ON b.Location = e.Location
+               WHERE e.Location = ?
+                 AND (
+                   ? = 'all'
+                   OR (e.reviewedAt IS NULL OR COALESCE(e.updatedAt,'') > COALESCE(e.reviewedAt,''))
+                 )
+               ORDER BY needsReview DESC, COALESCE(e.${orderCol}, '') DESC`
+          ).bind(buildingCode, mode).all();
+
+          const items = (res?.results || []).map(mapEquipmentRowToApi);
+          return Response.json({ items }, { headers: corsHeaders });
+      }
+
+      // --- EQUIPMENT REVIEW: BULK UPDATE (spreadsheet save) ---
+      if (url.pathname === '/api/equipment-review/bulk-update' && method === 'POST') {
+          if (!env.DB) throw new Error("DB binding not found on env");
+          const body = await request.json();
+          const updates = Array.isArray(body?.updates) ? body.updates : null;
+          if (!updates) {
+              return Response.json({ error: 'updates[] is required' }, { status: 400, headers: corsHeaders });
+          }
+
+          const now = isoNow();
+          const updatedItems = [];
+          const allowed = {
+              Equipment: 'Name',
+              EquipmentDesc: 'Description',
+              Room: 'Room_Raw',
+              Notes: 'Notes',
+              Manufacturer: 'Manufacturer',
+              SerialNum: 'Serial_Num',
+              Vendor: 'Vendor',
+              status: 'Status',
+          };
+
+          for (const u of updates) {
+              const id = u?.id !== undefined && u?.id !== null ? String(u.id) : '';
+              if (!id) continue;
+
+              const sets = [];
+              const binds = [];
+              for (const [key, col] of Object.entries(allowed)) {
+                  if (Object.prototype.hasOwnProperty.call(u, key)) {
+                      sets.push(`${col} = ?`);
+                      binds.push(u[key]);
+                  }
+              }
+
+              if (sets.length === 0) continue;
+              sets.push('updatedAt = ?');
+              binds.push(now);
+              binds.push(id);
+
+              const row = await env.DB.prepare(
+                  `UPDATE Equipment SET ${sets.join(', ')} WHERE id = ? RETURNING *`
+              ).bind(...binds).first();
+
+              if (row) updatedItems.push(mapEquipmentRowToApi(row));
+          }
+
+          return Response.json({ items: updatedItems }, { headers: corsHeaders });
+      }
+
+      // --- EQUIPMENT REVIEW: APPROVE (mark reviewed) ---
+      if (url.pathname === '/api/equipment-review/approve' && method === 'POST') {
+          if (!env.DB) throw new Error("DB binding not found on env");
+          const body = await request.json();
+          const now = isoNow();
+          const reviewedBy = (body?.reviewedBy !== undefined && body?.reviewedBy !== null) ? String(body.reviewedBy) : null;
+          const ids = Array.isArray(body?.ids) ? body.ids.map(x => String(x)) : (body?.id ? [String(body.id)] : []);
+          if (!ids.length) {
+              return Response.json({ error: 'id or ids[] is required' }, { status: 400, headers: corsHeaders });
+          }
+
+          const updatedItems = [];
+          for (const id of ids) {
+              const row = await env.DB.prepare(
+                  `UPDATE Equipment SET reviewedAt = ?, reviewedBy = ? WHERE id = ? RETURNING *`
+              ).bind(now, reviewedBy, id).first();
+              if (row) updatedItems.push(mapEquipmentRowToApi(row));
+          }
+
+          return Response.json({ items: updatedItems }, { headers: corsHeaders });
       }
 
       // --- CREATE/UPDATE ROOM ---

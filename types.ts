@@ -16,6 +16,12 @@ export interface Equipment {
   WarrantyDate: string;
   images: string[]; // URLs/Base64 strings
   status: 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN';
+
+  // Review metadata (ISO timestamps in UTC)
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
 }
 
 export interface MaintenanceRoom {
@@ -24,6 +30,7 @@ export interface MaintenanceRoom {
   RoomNumber: string;
   Description: string;
   Floor: string;
+  KeyAccess?: string | null;
   floorPlanId?: string; // ID of the linked FloorPlan
   x?: number; // X coordinate % on floor plan
   y?: number; // Y coordinate % on floor plan
