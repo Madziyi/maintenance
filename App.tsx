@@ -55,6 +55,7 @@ import { EquipmentList } from './src/components/equipment/EquipmentList';
 import { EquipmentDetailRoute } from './src/components/equipment/EquipmentDetailRoute';
 import { EquipmentReviewHome } from './src/components/equipment/EquipmentReviewHome';
 import { EquipmentReviewPage } from './src/components/equipment/EquipmentReviewPage';
+import { ExportsPage } from './src/components/exports/ExportsPage';
 import { BuildingList } from './src/components/rooms/BuildingList';
 import { BuildingDetail } from './src/components/rooms/BuildingDetail';
 import { RoomDetail } from './src/components/rooms/RoomDetail';
@@ -157,7 +158,7 @@ const App = () => {
         showToast("Building not found for this equipment.", 'error');
         return;
     }
-    const room = building.maintenanceRooms.find(r => r.RoomNumber === eq.Room);
+    const room = building.maintenanceRooms.find(r => r.RoomNumber === eq.room);
     if (!room) {
         // Fallback: Just go to the building list if exact room not found
         navigate(`/building/${building.code}`);
@@ -408,6 +409,7 @@ const App = () => {
             onClick={() => navigate('/equipment')}
           />
           <SidebarItem icon={Check} label="Equipment Review" active={location.pathname.startsWith('/equipment-review')} onClick={() => navigate('/equipment-review')} />
+          <SidebarItem icon={Download} label="Exports" active={location.pathname.startsWith('/exports')} onClick={() => navigate('/exports')} />
           <SidebarItem icon={MapPin} label="Equipment Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
         </nav>
 
@@ -451,6 +453,7 @@ const App = () => {
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/building'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Buildings</button>
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment</button>
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment-review'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment Review</button>
+              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/exports'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Exports</button>
               <button onClick={() => { setIsMobileMenuOpen(false); navigate('/rooms'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment Rooms</button>
               <button onClick={handleLogout} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg">Logout</button>
                 </div>
@@ -527,6 +530,7 @@ const App = () => {
                 onSetFullScreenImage={(url) => handleSetFullScreenImage(url)}
               />
             } />
+            <Route path="/exports" element={<ExportsPage canEdit={isAuthenticated} />} />
             <Route path="/building" element={
               <BuildingList 
                 data={data}

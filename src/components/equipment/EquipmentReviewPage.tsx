@@ -14,7 +14,7 @@ type Props = {
   onSetFullScreenImage: (url: string) => void;
 };
 
-const STATUSES: Equipment['status'][] = ['OPERATING', 'REPAIR', 'ONSHELF', 'INACTIVE', 'UNKNOWN'];
+const STATUSES: Equipment['status'][] = ['OPERATING', 'REPAIR', 'ONSHELF', 'INACTIVE', 'REMOVED', 'UNKNOWN'];
 
 function formatIsoShort(iso?: string | null) {
   if (!iso) return '';
@@ -116,7 +116,7 @@ export const EquipmentReviewPage: React.FC<Props> = ({ data, canEdit, onSetFullS
           Partial<
             Pick<
               Equipment,
-              'Equipment' | 'EquipmentDesc' | 'Room' | 'Notes' | 'Manufacturer' | 'SerialNum' | 'Vendor' | 'status'
+              'accountingName' | 'scadaName' | 'description' | 'room' | 'notes' | 'manufacturer' | 'serialNum' | 'vendor' | 'status'
             >
           >
       >
@@ -255,7 +255,7 @@ const SpreadsheetView: React.FC<{
     updates: Array<
       Pick<Equipment, 'id'> &
         Partial<
-          Pick<Equipment, 'Equipment' | 'EquipmentDesc' | 'Room' | 'Notes' | 'Manufacturer' | 'SerialNum' | 'Vendor' | 'status'>
+          Pick<Equipment, 'accountingName' | 'scadaName' | 'description' | 'room' | 'notes' | 'manufacturer' | 'serialNum' | 'vendor' | 'status'>
         >
     >
   ) => Promise<Equipment[]>;
@@ -291,13 +291,14 @@ const SpreadsheetView: React.FC<{
     if (!canEdit) return;
     const updates = Object.entries(draftById).map(([id, patch]) => ({
       id,
-      Equipment: patch.Equipment,
-      EquipmentDesc: patch.EquipmentDesc,
-      Room: patch.Room,
-      Notes: patch.Notes,
-      Manufacturer: patch.Manufacturer,
-      SerialNum: patch.SerialNum,
-      Vendor: patch.Vendor,
+      accountingName: patch.accountingName,
+      scadaName: patch.scadaName,
+      description: patch.description,
+      room: patch.room,
+      notes: patch.notes,
+      manufacturer: patch.manufacturer,
+      serialNum: patch.serialNum,
+      vendor: patch.vendor,
       status: patch.status,
     }));
     if (updates.length === 0) return;
@@ -351,10 +352,11 @@ const SpreadsheetView: React.FC<{
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1480px] w-full table-fixed">
+        <table className="min-w-[1700px] w-full table-fixed">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
-              <th className="p-3 w-56">Equipment</th>
+              <th className="p-3 w-56">Accounting name</th>
+              <th className="p-3 w-44">SCADA name</th>
               <th className="p-3 w-64">Description</th>
               <th className="p-3 w-16">Bldg</th>
               <th className="p-3 w-24">Room</th>
@@ -379,16 +381,24 @@ const SpreadsheetView: React.FC<{
                 <tr key={eq.id} className={isDirty ? 'bg-brand-50/40' : ''}>
                   <td className="p-3">
                     <input
-                      value={(getValue(eq.id, eq, 'Equipment') as any) || ''}
-                      onChange={e => setDraftValue(eq.id, 'Equipment', e.target.value)}
+                      value={(getValue(eq.id, eq, 'accountingName') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'accountingName', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       disabled={!canEdit || loading}
                     />
                   </td>
                   <td className="p-3">
                     <input
-                      value={(getValue(eq.id, eq, 'EquipmentDesc') as any) || ''}
-                      onChange={e => setDraftValue(eq.id, 'EquipmentDesc', e.target.value)}
+                      value={(getValue(eq.id, eq, 'scadaName') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'scadaName', e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      disabled={!canEdit || loading}
+                    />
+                  </td>
+                  <td className="p-3">
+                    <input
+                      value={(getValue(eq.id, eq, 'description') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'description', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       disabled={!canEdit || loading}
                     />
@@ -398,8 +408,8 @@ const SpreadsheetView: React.FC<{
                   </td>
                   <td className="p-3">
                     <input
-                      value={(getValue(eq.id, eq, 'Room') as any) || ''}
-                      onChange={e => setDraftValue(eq.id, 'Room', e.target.value)}
+                      value={(getValue(eq.id, eq, 'room') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'room', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       disabled={!canEdit || loading}
                     />
@@ -420,32 +430,32 @@ const SpreadsheetView: React.FC<{
                   </td>
                   <td className="p-3">
                     <input
-                      value={(getValue(eq.id, eq, 'Manufacturer') as any) || ''}
-                      onChange={e => setDraftValue(eq.id, 'Manufacturer', e.target.value)}
+                      value={(getValue(eq.id, eq, 'manufacturer') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'manufacturer', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       disabled={!canEdit || loading}
                     />
                   </td>
                   <td className="p-3">
                     <input
-                      value={(getValue(eq.id, eq, 'SerialNum') as any) || ''}
-                      onChange={e => setDraftValue(eq.id, 'SerialNum', e.target.value)}
+                      value={(getValue(eq.id, eq, 'serialNum') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'serialNum', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       disabled={!canEdit || loading}
                     />
                   </td>
                   <td className="p-3">
                     <input
-                      value={(getValue(eq.id, eq, 'Vendor') as any) || ''}
-                      onChange={e => setDraftValue(eq.id, 'Vendor', e.target.value)}
+                      value={(getValue(eq.id, eq, 'vendor') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'vendor', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       disabled={!canEdit || loading}
                     />
                   </td>
                   <td className="p-3">
                     <input
-                      value={(getValue(eq.id, eq, 'Notes') as any) || ''}
-                      onChange={e => setDraftValue(eq.id, 'Notes', e.target.value)}
+                      value={(getValue(eq.id, eq, 'notes') as any) || ''}
+                      onChange={e => setDraftValue(eq.id, 'notes', e.target.value)}
                       className="w-full px-2 py-1.5 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       disabled={!canEdit || loading}
                     />
@@ -513,7 +523,7 @@ const PhotoReviewView: React.FC<{
     updates: Array<
       Pick<Equipment, 'id'> &
         Partial<
-          Pick<Equipment, 'Equipment' | 'EquipmentDesc' | 'Room' | 'Notes' | 'Manufacturer' | 'SerialNum' | 'Vendor' | 'status'>
+          Pick<Equipment, 'accountingName' | 'scadaName' | 'description' | 'room' | 'notes' | 'manufacturer' | 'serialNum' | 'vendor' | 'status'>
         >
     >
   ) => Promise<Equipment[]>;
@@ -542,13 +552,14 @@ const PhotoReviewView: React.FC<{
   const openEdit = () => {
     if (!current) return;
     setModalDraft({
-      Equipment: current.Equipment,
-      EquipmentDesc: current.EquipmentDesc,
-      Room: current.Room,
-      Notes: current.Notes,
-      Manufacturer: current.Manufacturer,
-      SerialNum: current.SerialNum,
-      Vendor: current.Vendor,
+      accountingName: current.accountingName,
+      scadaName: current.scadaName,
+      description: current.description,
+      room: current.room,
+      notes: current.notes,
+      manufacturer: current.manufacturer,
+      serialNum: current.serialNum,
+      vendor: current.vendor,
       status: current.status,
     });
     setIsModalOpen(true);
@@ -614,12 +625,12 @@ const PhotoReviewView: React.FC<{
                 i === idx ? 'bg-brand-50' : ''
               }`}
             >
-              <div className="text-sm font-medium text-slate-900 truncate">{eq.Equipment}</div>
-              {eq.EquipmentDesc ? (
-                <div className="text-xs text-slate-500 mt-0.5 truncate">{eq.EquipmentDesc}</div>
+              <div className="text-sm font-medium text-slate-900 truncate">{eq.accountingName}</div>
+              {eq.description ? (
+                <div className="text-xs text-slate-500 mt-0.5 truncate">{eq.description}</div>
               ) : null}
               <div className="text-xs text-slate-400 mt-0.5 truncate">
-                {(eq.LocationDesc || eq.Location) || '—'} • Room {eq.Room || '—'} • {eq.status}
+                {(eq.LocationDesc || eq.Location) || '—'} • Room {eq.room || '—'} • {eq.status}
               </div>
             </button>
           ))}
@@ -631,23 +642,37 @@ const PhotoReviewView: React.FC<{
         <div className="flex items-start justify-between gap-3 min-w-0">
           <div className="min-w-0">
             <div className="text-lg font-semibold text-slate-900 truncate">
-              {current.Equipment}
-              {current.EquipmentDesc ? (
-                <span className="text-slate-500 font-medium"> — {current.EquipmentDesc}</span>
+              {current.accountingName}
+              {current.previousAccountingName &&
+              current.previousAccountingName.trim() !== '' &&
+              current.previousAccountingName !== current.accountingName ? (
+                <span className="text-slate-500 font-medium">
+                  {' '}
+                  (prev: {current.previousAccountingName})
+                </span>
+              ) : null}
+              {current.description ? (
+                <span className="text-slate-500 font-medium"> — {current.description}</span>
               ) : null}
             </div>
             <div className="text-sm text-slate-500 truncate">
               {current.LocationDesc || current.Location || '—'}
+              {current.scadaName ? (
+                <>
+                  <span className="mx-2">•</span>
+                  SCADA: {current.scadaName}
+                </>
+              ) : null}
               <span className="mx-2">•</span>
-              Room {current.Room || '—'}
+              Room {current.room || '—'}
               <span className="mx-2">•</span>
               {current.status}
-              {(current.Manufacturer || current.SerialNum) ? <span className="mx-2">•</span> : null}
-              {current.Manufacturer ? <span> Mfr: {current.Manufacturer}</span> : null}
-              {current.SerialNum ? <span> {current.Manufacturer ? '•' : ''} S/N: {current.SerialNum}</span> : null}
+              {(current.manufacturer || current.serialNum) ? <span className="mx-2">•</span> : null}
+              {current.manufacturer ? <span> Mfr: {current.manufacturer}</span> : null}
+              {current.serialNum ? <span> {current.manufacturer ? '•' : ''} S/N: {current.serialNum}</span> : null}
             </div>
           </div>
-          {current.Notes && current.Notes.trim() !== '' ? (
+          {current.notes && current.notes.trim() !== '' ? (
             <button
               onClick={() => setIsNotesOpen(true)}
               className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium flex-shrink-0"
@@ -724,7 +749,7 @@ const PhotoReviewView: React.FC<{
             </div>
             <div className="p-4">
               <div className="text-sm text-slate-700 whitespace-pre-wrap break-words">
-                {current.Notes}
+                {current.notes}
               </div>
             </div>
           </div>
@@ -741,24 +766,31 @@ const PhotoReviewView: React.FC<{
               </button>
             </div>
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Field label="Equipment name">
+              <Field label="Accounting name">
                 <input
-                  value={(modalDraft.Equipment as any) || ''}
-                  onChange={e => setModalDraft(d => ({ ...d, Equipment: e.target.value }))}
+                  value={(modalDraft.accountingName as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, accountingName: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </Field>
+              <Field label="SCADA name">
+                <input
+                  value={(modalDraft.scadaName as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, scadaName: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </Field>
               <Field label="Description">
                 <input
-                  value={(modalDraft.EquipmentDesc as any) || ''}
-                  onChange={e => setModalDraft(d => ({ ...d, EquipmentDesc: e.target.value }))}
+                  value={(modalDraft.description as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, description: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </Field>
               <Field label="Room">
                 <input
-                  value={(modalDraft.Room as any) || ''}
-                  onChange={e => setModalDraft(d => ({ ...d, Room: e.target.value }))}
+                  value={(modalDraft.room as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, room: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </Field>
@@ -777,29 +809,29 @@ const PhotoReviewView: React.FC<{
               </Field>
               <Field label="Manufacturer">
                 <input
-                  value={(modalDraft.Manufacturer as any) || ''}
-                  onChange={e => setModalDraft(d => ({ ...d, Manufacturer: e.target.value }))}
+                  value={(modalDraft.manufacturer as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, manufacturer: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </Field>
               <Field label="Serial">
                 <input
-                  value={(modalDraft.SerialNum as any) || ''}
-                  onChange={e => setModalDraft(d => ({ ...d, SerialNum: e.target.value }))}
+                  value={(modalDraft.serialNum as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, serialNum: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </Field>
               <Field label="Vendor">
                 <input
-                  value={(modalDraft.Vendor as any) || ''}
-                  onChange={e => setModalDraft(d => ({ ...d, Vendor: e.target.value }))}
+                  value={(modalDraft.vendor as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, vendor: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </Field>
               <Field label="Notes">
                 <input
-                  value={(modalDraft.Notes as any) || ''}
-                  onChange={e => setModalDraft(d => ({ ...d, Notes: e.target.value }))}
+                  value={(modalDraft.notes as any) || ''}
+                  onChange={e => setModalDraft(d => ({ ...d, notes: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </Field>

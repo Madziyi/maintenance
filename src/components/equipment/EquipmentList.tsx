@@ -61,6 +61,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const [isAddingEquipment, setIsAddingEquipment] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newEquipmentName, setNewEquipmentName] = useState('');
+  const [newEquipmentScadaName, setNewEquipmentScadaName] = useState('');
   const [newEquipmentDesc, setNewEquipmentDesc] = useState('');
   const [newEquipmentLocation, setNewEquipmentLocation] = useState('');
   const [newEquipmentRoom, setNewEquipmentRoom] = useState('');
@@ -68,7 +69,9 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const [newEquipmentVendor, setNewEquipmentVendor] = useState('');
   const [newEquipmentSerialNum, setNewEquipmentSerialNum] = useState('');
   const [newEquipmentNotes, setNewEquipmentNotes] = useState('');
-  const [newEquipmentStatus, setNewEquipmentStatus] = useState<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'>('UNKNOWN');
+  const [newEquipmentStatus, setNewEquipmentStatus] = useState<
+    'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'REMOVED' | 'UNKNOWN'
+  >('UNKNOWN');
   const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
@@ -152,7 +155,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     
     const rooms = relevantEquipment
       .map(e => ({
-        room: e.Room?.trim() || '',
+        room: e.room?.trim() || '',
         location: e.Location
       }))
       .filter(r => r.room && r.room !== '') // Exclude empty
@@ -166,7 +169,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
         room: r.room,
         location: r.location,
         count: relevantEquipment.filter(e => 
-          e.Location === r.location && e.Room?.trim() === r.room
+          e.Location === r.location && e.room?.trim() === r.room
         ).length
       }))
       .sort((a, b) => {
@@ -183,7 +186,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   // Extract unique descriptions (exact match, preserve casing)
   const descriptionOptions = useMemo(() => {
     const descriptions = allEquipment
-      .map(e => e.EquipmentDesc?.trim())
+      .map(e => e.description?.trim())
       .filter(d => d && d !== '') // Exclude empty
       .filter((d, i, arr) => {
         // Case-insensitive uniqueness check, but preserve original casing
@@ -193,7 +196,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       .map(desc => ({
         value: desc,
         count: allEquipment.filter(e => 
-          e.EquipmentDesc?.trim().toLowerCase() === desc.toLowerCase()
+          e.description?.trim().toLowerCase() === desc.toLowerCase()
         ).length
       }))
       .sort((a, b) => a.value.localeCompare(b.value));
@@ -201,7 +204,14 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   }, [allEquipment]);
 
   // Status options
-  const statusOptions: Array<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'> = ['INACTIVE', 'ONSHELF', 'OPERATING', 'REPAIR', 'UNKNOWN'];
+  const statusOptions: Array<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'REMOVED' | 'UNKNOWN'> = [
+    'INACTIVE',
+    'ONSHELF',
+    'OPERATING',
+    'REPAIR',
+    'REMOVED',
+    'UNKNOWN',
+  ];
   
   const statusOptionsWithCounts = useMemo(() => {
     return statusOptions.map(status => ({
@@ -217,7 +227,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       const searchMatch = fuzzyMatch(
         e,
         searchTerm,
-        ['Equipment', 'EquipmentDesc', 'AssetTag'],
+        ['accountingName', 'scadaName', 'description', 'AssetTag'],
         { threshold: 0.4 } // Balanced: allows ~60% similarity
       );
       
@@ -232,20 +242,20 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
           if (selected.includes('|') && selectedLocations.length > 1) {
             // Multiple locations: format is "Location|Room" (pipe to avoid conflicts with room names containing dashes)
             const [loc, room] = selected.split('|', 2);
-            return e.Location === loc && e.Room?.trim() === room;
+            return e.Location === loc && e.room?.trim() === room;
           } else {
             // Single location selected, room format is just room name
             // Check if equipment is in the selected location and matches the room
             return selectedLocations.length === 1 && 
                    selectedLocations.includes(e.Location) && 
-                   e.Room?.trim() === selected;
+                   e.room?.trim() === selected;
           }
         });
       
       // Description filter (exact match, case-insensitive)
       const descMatch = selectedDescriptions.length === 0 ||
         selectedDescriptions.some(selected => 
-          e.EquipmentDesc?.trim().toLowerCase() === selected.toLowerCase()
+          e.description?.trim().toLowerCase() === selected.toLowerCase()
         );
       
       // Status filter
@@ -515,18 +525,21 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       const selectedBuilding = data.find(b => b.code === newEquipmentLocation);
       const newEq: Equipment = {
         id: `EQ-NEW-${Date.now()}`,
-        Equipment: newEquipmentName.trim(),
-        EquipmentDesc: newEquipmentDesc.trim(),
-        Notes: newEquipmentNotes.trim(),
+        accountingName: newEquipmentName.trim(),
+        previousAccountingName: null,
+        scadaName: newEquipmentScadaName.trim() || null,
+
+        description: newEquipmentDesc.trim(),
+        notes: newEquipmentNotes.trim(),
         Location: newEquipmentLocation,
         LocationDesc: selectedBuilding?.name || '',
-        Room: newEquipmentRoom || '',
+        room: newEquipmentRoom || '',
         KeyAccess: '',
         AssetTag: '',
-        SerialNum: newEquipmentSerialNum.trim(),
-        Manufacturer: newEquipmentManufacturer.trim(),
+        serialNum: newEquipmentSerialNum.trim(),
+        manufacturer: newEquipmentManufacturer.trim(),
         Model: '',
-        Vendor: newEquipmentVendor.trim(),
+        vendor: newEquipmentVendor.trim(),
         PurchaseDate: '',
         WarrantyDate: '',
         images: newEquipmentImages,
@@ -542,6 +555,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       // Reset form
       setIsAddingEquipment(false);
       setNewEquipmentName('');
+      setNewEquipmentScadaName('');
       setNewEquipmentDesc('');
       setNewEquipmentLocation('');
       setNewEquipmentRoom('');
@@ -572,6 +586,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     
     setIsAddingEquipment(false);
     setNewEquipmentName('');
+    setNewEquipmentScadaName('');
     setNewEquipmentDesc('');
     setNewEquipmentLocation('');
     setNewEquipmentRoom('');
@@ -585,16 +600,35 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
 
   const handleExport = () => {
     const headers = [
-      "Equipment", "EquipmentDesc", "Notes", "Location", "LocationDesc", "Room", 
+      "AccountingName", "PreviousAccountingName", "ScadaName", "Description", "Notes", "Location", "LocationDesc", "Room", 
       "Key For Access", "CreationDate", "AssetTag", "SerialNum", "PurchaseDate", 
       "FailureClass", "Hazardous", "Instructions", "ItemNum", "Manufacturer", 
       "PurchaseDate", "PurchasePrice", "Vendor", "WarrantyDate"
     ];
     const csvContent = allEquipment.map(e => {
       return [
-        e.Equipment, e.EquipmentDesc, e.Notes, e.Location, e.LocationDesc, e.Room, e.KeyAccess,
-        "", e.AssetTag, e.SerialNum, e.PurchaseDate, "", "", "", "", e.Manufacturer,
-        e.PurchaseDate, "", e.Vendor, e.WarrantyDate
+        e.accountingName,
+        e.previousAccountingName || '',
+        e.scadaName || '',
+        e.description,
+        e.notes,
+        e.Location,
+        e.LocationDesc,
+        e.room,
+        e.KeyAccess,
+        "",
+        e.AssetTag,
+        e.serialNum,
+        e.PurchaseDate,
+        "",
+        "",
+        "",
+        "",
+        e.manufacturer,
+        e.PurchaseDate,
+        "",
+        e.vendor,
+        e.WarrantyDate
       ].map(field => `"${(field || '').toString().replace(/"/g, '""')}"`).join(',');
     });
     const csvString = [headers.join(','), ...csvContent].join('\n');
@@ -1031,12 +1065,12 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                                 className={`transition-transform ${isExpanded ? 'rotate-90 text-brand-600' : 'text-slate-300'}`}
                               />
                             </button>
-                            <span className="truncate">{e.Equipment}</span>
+                            <span className="truncate">{e.accountingName}</span>
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.EquipmentDesc || "N/A"}</td>
+                        <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.description || "N/A"}</td>
                         <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.Location}</td>
-                        <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.Room || "-"}</td>
+                        <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.room || "-"}</td>
                         <td className="py-3.5 px-4">
                           <span
                             className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
@@ -1074,7 +1108,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                                   >
                                     <img
                                       src={url}
-                                      alt={`Equipment ${e.Equipment} ${idx + 1}`}
+                                      alt={`Equipment ${e.accountingName} ${idx + 1}`}
                                       loading="lazy"
                                       className="h-32 w-32 rounded-md object-cover border border-slate-200"
                                     />
@@ -1118,16 +1152,16 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex-1 min-w-0">
                       <div className="font-mono text-sm font-medium text-brand-700">
-                        {e.Equipment}
+                        {e.accountingName}
                       </div>
                       <div className="text-sm text-slate-600 mt-1 line-clamp-2">
-                        {e.EquipmentDesc || "N/A"}
+                        {e.description || "N/A"}
                       </div>
                       <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
                         <span className="truncate">{e.Location}</span>
-                        {e.Room && (
+                        {e.room && (
                           <span className="truncate">
-                            <span className="font-medium">Room:</span> {e.Room}
+                            <span className="font-medium">Room:</span> {e.room}
                           </span>
                         )}
                       </div>
@@ -1183,7 +1217,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                             >
                               <img
                                 src={url}
-                                alt={`Equipment ${e.Equipment} ${idx + 1}`}
+                                alt={`Equipment ${e.accountingName} ${idx + 1}`}
                                 loading="lazy"
                                 className="h-28 w-28 rounded-md object-cover border border-slate-200"
                               />
@@ -1242,7 +1276,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-slate-600 mb-1">
-                  Equipment Name <span className="text-red-500">*</span>
+                  Accounting Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -1256,6 +1290,17 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                       handleSaveNewEquipment();
                     }
                   }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">SCADA Name</label>
+                <input
+                  type="text"
+                  value={newEquipmentScadaName}
+                  onChange={(e) => setNewEquipmentScadaName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  placeholder="SCADA tag/name (optional)"
                 />
               </div>
               
@@ -1322,7 +1367,11 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 </label>
                 <select
                   value={newEquipmentStatus}
-                  onChange={(e) => setNewEquipmentStatus(e.target.value as 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN')}
+                  onChange={(e) =>
+                    setNewEquipmentStatus(
+                      e.target.value as 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'REMOVED' | 'UNKNOWN'
+                    )
+                  }
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
                 >
                   {statusOptions.map(status => (

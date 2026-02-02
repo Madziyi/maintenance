@@ -30,6 +30,7 @@ function isoNow() {
 }
 
 let equipmentReviewSchemaEnsured = false;
+let equipmentChangeLogSchemaEnsured = false;
 
 async function ensureEquipmentReviewSchema(db) {
   if (equipmentReviewSchemaEnsured) return;
@@ -43,6 +44,10 @@ async function ensureEquipmentReviewSchema(db) {
       await db.prepare(`ALTER TABLE Equipment ADD COLUMN ${name} ${type}`).run();
       cols.add(name);
     };
+
+    await maybeAddColumn('accountingName', 'TEXT');
+    await maybeAddColumn('previousAccountingName', 'TEXT');
+    await maybeAddColumn('scadaName', 'TEXT');
 
     await maybeAddColumn('createdAt', 'TEXT');
     await maybeAddColumn('updatedAt', 'TEXT');
@@ -66,22 +71,54 @@ async function ensureEquipmentReviewSchema(db) {
   }
 }
 
+async function ensureEquipmentChangeLogSchema(db) {
+  if (equipmentChangeLogSchemaEnsured) return;
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS EquipmentChangeLog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        equipmentId TEXT NOT NULL,
+        field TEXT NOT NULL,
+        oldValue TEXT,
+        newValue TEXT,
+        changedAt TEXT NOT NULL,
+        changedBy TEXT,
+        source TEXT,
+        correlationId TEXT
+      )
+    `).run();
+
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_ecl_changedAt ON EquipmentChangeLog(changedAt)").run();
+    await db.prepare(
+      "CREATE INDEX IF NOT EXISTS idx_ecl_equipmentId_changedAt ON EquipmentChangeLog(equipmentId, changedAt)"
+    ).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_ecl_field_changedAt ON EquipmentChangeLog(field, changedAt)").run();
+  } catch (e) {
+    console.warn("ensureEquipmentChangeLogSchema failed:", e?.message || String(e));
+  } finally {
+    equipmentChangeLogSchemaEnsured = true;
+  }
+}
+
 function mapEquipmentRowToApi(row) {
   const images = safeJSONParse(row.Images, []);
   return {
     id: String(row.id),
-    Equipment: row.Name || 'Unnamed Equipment',
-    EquipmentDesc: row.Description || '',
-    Notes: row.Notes || '',
+    accountingName: row.accountingName || row.Name || '',
+    previousAccountingName: row.previousAccountingName || null,
+    scadaName: row.scadaName || null,
+
+    description: row.Description || '',
+    notes: row.Notes || '',
     Location: row.Location || '',
     LocationDesc: row.BuildingName || row.LocationDesc || '',
-    Room: row.Room_Raw || '',
+    room: row.Room_Raw || '',
     KeyAccess: row.KeyAccess || '',
     AssetTag: '',
-    SerialNum: row.Serial_Num || '',
-    Manufacturer: row.Manufacturer || '',
+    serialNum: row.Serial_Num || '',
+    manufacturer: row.Manufacturer || '',
     Model: '',
-    Vendor: row.Vendor || '',
+    vendor: row.Vendor || '',
     PurchaseDate: '',
     WarrantyDate: '',
     images: Array.isArray(images) ? images : [],
@@ -91,6 +128,44 @@ function mapEquipmentRowToApi(row) {
     reviewedAt: row.reviewedAt || null,
     reviewedBy: row.reviewedBy || null,
   };
+}
+
+function csvEscape(value) {
+  const s = (value === null || value === undefined) ? '' : String(value);
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function toCsv(headers, rows) {
+  const lines = [];
+  lines.push(headers.map(csvEscape).join(','));
+  for (const row of rows) {
+    lines.push(row.map(csvEscape).join(','));
+  }
+  return lines.join('\n');
+}
+
+function randomCorrelationId() {
+  return `chg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function insertEquipmentChangeLogs(db, entries) {
+  if (!entries || entries.length === 0) return;
+  const stmt = db.prepare(
+    `INSERT INTO EquipmentChangeLog (equipmentId, field, oldValue, newValue, changedAt, changedBy, source, correlationId)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const e of entries) {
+    await stmt.bind(
+      e.equipmentId,
+      e.field,
+      e.oldValue ?? null,
+      e.newValue ?? null,
+      e.changedAt,
+      e.changedBy ?? null,
+      e.source ?? null,
+      e.correlationId ?? null
+    ).run();
+  }
 }
 
 export default {
@@ -119,6 +194,7 @@ export default {
       // Ensure review schema is present (best-effort, once per worker instance).
       if (env.DB) {
         await ensureEquipmentReviewSchema(env.DB);
+        await ensureEquipmentChangeLogSchema(env.DB);
       }
 
       // --- GET AGGREGATED DATA ---
@@ -232,18 +308,21 @@ export default {
 
                 b.equipment.push({
                     id: String(e.id),
-                    Equipment: e.Name || 'Unnamed Equipment',
-                    EquipmentDesc: e.Description || '',
-                    Notes: e.Notes || '',
+                    accountingName: e.accountingName || e.Name || '',
+                    previousAccountingName: e.previousAccountingName || null,
+                    scadaName: e.scadaName || null,
+
+                    description: e.Description || '',
+                    notes: e.Notes || '',
                     Location: e.Location,
                     LocationDesc: b.name,
-                    Room: e.Room_Raw || '',
+                    room: e.Room_Raw || '',
                     KeyAccess: keyAccess,
                     AssetTag: '', 
-                    SerialNum: e.Serial_Num || '',
-                    Manufacturer: e.Manufacturer || '',
+                    serialNum: e.Serial_Num || '',
+                    manufacturer: e.Manufacturer || '',
                     Model: '',
-                    Vendor: e.Vendor || '',
+                    vendor: e.Vendor || '',
                     PurchaseDate: '',
                     WarrantyDate: '',
                     images: Array.isArray(images) ? images : [],
@@ -257,6 +336,134 @@ export default {
         }
 
         return Response.json(Object.values(buildingMap), { headers: corsHeaders });
+      }
+
+      // --- EXPORTS: SHEET A (NEW) ---
+      if (url.pathname === '/api/exports/sheet-a' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const format = (url.searchParams.get('format') || 'json').toLowerCase();
+
+        const res = await env.DB.prepare(
+          `SELECT e.*, b.Building as BuildingName
+           FROM Equipment e
+           LEFT JOIN Buildings b ON b.Location = e.Location
+           WHERE (e.accountingName IS NULL OR TRIM(e.accountingName) = '')
+             AND COALESCE(e.Status,'UNKNOWN') != 'REMOVED'
+           ORDER BY COALESCE(e.updatedAt, e.createdAt, '') DESC`
+        ).all();
+
+        const items = (res?.results || []).map(mapEquipmentRowToApi);
+        if (format === 'csv') {
+          const headers = [
+            'id','accountingName','previousAccountingName','scadaName','description','notes','Location','LocationDesc','room',
+            'manufacturer','serialNum','vendor','status','createdAt','updatedAt','reviewedAt','reviewedBy'
+          ];
+          const rows = items.map(e => [
+            e.id, e.accountingName, e.previousAccountingName, e.scadaName, e.description, e.notes, e.Location, e.LocationDesc, e.room,
+            e.manufacturer, e.serialNum, e.vendor, e.status, e.createdAt, e.updatedAt, e.reviewedAt, e.reviewedBy
+          ]);
+          const csv = toCsv(headers, rows);
+          return new Response(csv, {
+            headers: { ...corsHeaders, 'Content-Type': 'text/csv; charset=utf-8' }
+          });
+        }
+        return Response.json({ items }, { headers: corsHeaders });
+      }
+
+      // --- EXPORTS: SHEET B (REMOVED) ---
+      if (url.pathname === '/api/exports/sheet-b' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const format = (url.searchParams.get('format') || 'json').toLowerCase();
+
+        const res = await env.DB.prepare(
+          `SELECT e.*, b.Building as BuildingName
+           FROM Equipment e
+           LEFT JOIN Buildings b ON b.Location = e.Location
+           WHERE COALESCE(e.Status,'UNKNOWN') = 'REMOVED'
+           ORDER BY COALESCE(e.updatedAt, e.createdAt, '') DESC`
+        ).all();
+
+        const items = (res?.results || []).map(mapEquipmentRowToApi);
+        if (format === 'csv') {
+          const headers = [
+            'id','accountingName','previousAccountingName','scadaName','description','notes','Location','LocationDesc','room',
+            'manufacturer','serialNum','vendor','status','createdAt','updatedAt','reviewedAt','reviewedBy'
+          ];
+          const rows = items.map(e => [
+            e.id, e.accountingName, e.previousAccountingName, e.scadaName, e.description, e.notes, e.Location, e.LocationDesc, e.room,
+            e.manufacturer, e.serialNum, e.vendor, e.status, e.createdAt, e.updatedAt, e.reviewedAt, e.reviewedBy
+          ]);
+          const csv = toCsv(headers, rows);
+          return new Response(csv, {
+            headers: { ...corsHeaders, 'Content-Type': 'text/csv; charset=utf-8' }
+          });
+        }
+        return Response.json({ items }, { headers: corsHeaders });
+      }
+
+      // --- EXPORTS: SHEET C (CHANGED SINCE) ---
+      if (url.pathname === '/api/exports/sheet-c' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const format = (url.searchParams.get('format') || 'json').toLowerCase();
+        const since = url.searchParams.get('since');
+        if (!since) {
+          return Response.json({ error: 'since is required (ISO timestamp)' }, { status: 400, headers: corsHeaders });
+        }
+
+        // Use a JOIN instead of "WHERE id IN (...)" to avoid SQLite/D1 variable limits.
+        const joinedRes = await env.DB.prepare(
+          `WITH changes AS (
+             SELECT
+               equipmentId,
+               MAX(changedAt) AS lastChangedAt,
+               GROUP_CONCAT(DISTINCT field) AS changedFields
+             FROM EquipmentChangeLog
+             WHERE changedAt >= ?
+             GROUP BY equipmentId
+           )
+           SELECT
+             e.*,
+             b.Building AS BuildingName,
+             changes.lastChangedAt AS lastChangedAt,
+             changes.changedFields AS changedFields
+           FROM changes
+           JOIN Equipment e ON CAST(e.id AS TEXT) = changes.equipmentId
+           LEFT JOIN Buildings b ON b.Location = e.Location
+           ORDER BY changes.lastChangedAt DESC`
+        ).bind(since).all();
+
+        const joined = joinedRes?.results || [];
+        const items = joined.map(r => {
+          const equipment = mapEquipmentRowToApi(r);
+          const fields = (r.changedFields ? String(r.changedFields).split(',') : []).filter(Boolean).sort();
+          return {
+            equipment,
+            lastChangedAt: r.lastChangedAt || null,
+            changedFields: fields,
+          };
+        });
+
+        if (format === 'csv') {
+          const headers = [
+            'id','accountingName','previousAccountingName','scadaName','description','notes','Location','LocationDesc','room',
+            'manufacturer','serialNum','vendor','status','createdAt','updatedAt','reviewedAt','reviewedBy',
+            'lastChangedAt','changedFields'
+          ];
+          const rows = items.map(x => {
+            const e = x.equipment;
+            return [
+              e.id, e.accountingName, e.previousAccountingName, e.scadaName, e.description, e.notes, e.Location, e.LocationDesc, e.room,
+              e.manufacturer, e.serialNum, e.vendor, e.status, e.createdAt, e.updatedAt, e.reviewedAt, e.reviewedBy,
+              x.lastChangedAt, (x.changedFields || []).join('|')
+            ];
+          });
+          const csv = toCsv(headers, rows);
+          return new Response(csv, {
+            headers: { ...corsHeaders, 'Content-Type': 'text/csv; charset=utf-8' }
+          });
+        }
+
+        return Response.json({ items }, { headers: corsHeaders });
       }
 
       // --- CREATE/UPDATE BUILDING ---
@@ -333,45 +540,128 @@ export default {
           
           const isNew = isNaN(Number(e.id));
           const now = isoNow();
+          const correlationId = randomCorrelationId();
           
           let result;
           if (isNew) {
+              // Log initial values (best-effort; treat as creation).
+              const createEntries = [
+                { field: 'accountingName', oldValue: null, newValue: e.accountingName || '' },
+                { field: 'previousAccountingName', oldValue: null, newValue: e.previousAccountingName || null },
+                { field: 'scadaName', oldValue: null, newValue: e.scadaName || null },
+                { field: 'Description', oldValue: null, newValue: e.description || '' },
+                { field: 'Location', oldValue: null, newValue: e.Location || '' },
+                { field: 'Room_Raw', oldValue: null, newValue: e.room || '' },
+                { field: 'Notes', oldValue: null, newValue: e.notes || '' },
+                { field: 'Serial_Num', oldValue: null, newValue: e.serialNum || '' },
+                { field: 'Manufacturer', oldValue: null, newValue: e.manufacturer || '' },
+                { field: 'Vendor', oldValue: null, newValue: e.vendor || '' },
+                { field: 'Images', oldValue: null, newValue: imagesJson },
+                { field: 'Status', oldValue: null, newValue: e.status || 'UNKNOWN' },
+              ];
               result = await env.DB.prepare(`
-                INSERT INTO Equipment (Name, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status, createdAt, updatedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+                INSERT INTO Equipment (accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status, createdAt, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
               `).bind(
-                e.Equipment,
-                e.EquipmentDesc,
+                e.accountingName || '',
+                e.previousAccountingName || null,
+                e.scadaName || null,
+                e.description || '',
                 e.Location,
-                e.Room,
-                e.Notes,
-                e.SerialNum,
-                e.Manufacturer,
-                e.Vendor,
+                e.room || '',
+                e.notes || '',
+                e.serialNum || '',
+                e.manufacturer || '',
+                e.vendor || '',
                 imagesJson,
                 e.status || 'UNKNOWN',
                 now,
                 now
               ).first();
+
+              if (result) {
+                await insertEquipmentChangeLogs(
+                  env.DB,
+                  createEntries.map(x => ({
+                    equipmentId: String(result.id),
+                    field: x.field,
+                    oldValue: x.oldValue,
+                    newValue: x.newValue,
+                    changedAt: now,
+                    changedBy: null,
+                    source: 'equipment_save',
+                    correlationId,
+                  }))
+                );
+              }
           } else {
+              const existing = await env.DB.prepare(
+                'SELECT accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status FROM Equipment WHERE id=?'
+              ).bind(e.id).first();
+              const oldName = existing?.accountingName || '';
+              const nextName = (e.accountingName || '').trim();
+              const shouldSetPrev = oldName && nextName && oldName !== nextName;
+              const prevName = shouldSetPrev ? oldName : (e.previousAccountingName ?? existing?.previousAccountingName ?? null);
+
+              const oldImagesJson = existing?.Images || '[]';
+
+              const diffs = [];
+              const addDiff = (field, oldValue, newValue) => {
+                const oldS = oldValue === null || oldValue === undefined ? '' : String(oldValue);
+                const newS = newValue === null || newValue === undefined ? '' : String(newValue);
+                if (oldS !== newS) diffs.push({ field, oldValue: oldValue ?? null, newValue: newValue ?? null });
+              };
+
+              addDiff('accountingName', existing?.accountingName ?? null, nextName);
+              addDiff('previousAccountingName', existing?.previousAccountingName ?? null, prevName);
+              addDiff('scadaName', existing?.scadaName ?? null, e.scadaName || null);
+              addDiff('Description', existing?.Description ?? null, e.description || '');
+              addDiff('Location', existing?.Location ?? null, e.Location || '');
+              addDiff('Room_Raw', existing?.Room_Raw ?? null, e.room || '');
+              addDiff('Notes', existing?.Notes ?? null, e.notes || '');
+              addDiff('Serial_Num', existing?.Serial_Num ?? null, e.serialNum || '');
+              addDiff('Manufacturer', existing?.Manufacturer ?? null, e.manufacturer || '');
+              addDiff('Vendor', existing?.Vendor ?? null, e.vendor || '');
+              addDiff('Status', existing?.Status ?? null, e.status || 'UNKNOWN');
+              // Images: compare stringified JSON
+              addDiff('Images', oldImagesJson, imagesJson);
+
               result = await env.DB.prepare(`
                 UPDATE Equipment SET 
-                Name=?, Description=?, Location=?, Room_Raw=?, Notes=?, Serial_Num=?, Manufacturer=?, Vendor=?, Images=?, Status=?, updatedAt=?
+                accountingName=?, previousAccountingName=?, scadaName=?, Description=?, Location=?, Room_Raw=?, Notes=?, Serial_Num=?, Manufacturer=?, Vendor=?, Images=?, Status=?, updatedAt=?
                 WHERE id=? RETURNING *
               `).bind(
-                e.Equipment,
-                e.EquipmentDesc,
+                nextName,
+                prevName,
+                e.scadaName || null,
+                e.description || '',
                 e.Location,
-                e.Room,
-                e.Notes,
-                e.SerialNum,
-                e.Manufacturer,
-                e.Vendor,
+                e.room || '',
+                e.notes || '',
+                e.serialNum || '',
+                e.manufacturer || '',
+                e.vendor || '',
                 imagesJson,
                 e.status || 'UNKNOWN',
                 now,
                 e.id
               ).first();
+
+              if (result && diffs.length > 0) {
+                await insertEquipmentChangeLogs(
+                  env.DB,
+                  diffs.map(d => ({
+                    equipmentId: String(e.id),
+                    field: d.field,
+                    oldValue: d.oldValue,
+                    newValue: d.newValue,
+                    changedAt: now,
+                    changedBy: null,
+                    source: 'equipment_save',
+                    correlationId,
+                  }))
+                );
+              }
           }
           
           if (!result) throw new Error("Failed to save equipment: DB returned no result.");
@@ -379,6 +669,8 @@ export default {
           const mapped = {
               ...e,
               id: String(result.id),
+              previousAccountingName: result.previousAccountingName || null,
+              scadaName: result.scadaName || null,
               createdAt: result.createdAt || null,
               updatedAt: result.updatedAt || null,
               reviewedAt: result.reviewedAt || null,
@@ -452,15 +744,18 @@ export default {
           }
 
           const now = isoNow();
+          const correlationId = randomCorrelationId();
           const updatedItems = [];
           const allowed = {
-              Equipment: 'Name',
-              EquipmentDesc: 'Description',
-              Room: 'Room_Raw',
-              Notes: 'Notes',
-              Manufacturer: 'Manufacturer',
-              SerialNum: 'Serial_Num',
-              Vendor: 'Vendor',
+              accountingName: 'accountingName',
+              previousAccountingName: 'previousAccountingName',
+              scadaName: 'scadaName',
+              description: 'Description',
+              room: 'Room_Raw',
+              notes: 'Notes',
+              manufacturer: 'Manufacturer',
+              serialNum: 'Serial_Num',
+              vendor: 'Vendor',
               status: 'Status',
           };
 
@@ -468,12 +763,26 @@ export default {
               const id = u?.id !== undefined && u?.id !== null ? String(u.id) : '';
               if (!id) continue;
 
+              const existing = await env.DB.prepare(
+                'SELECT accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status FROM Equipment WHERE id=?'
+              ).bind(id).first();
+
               const sets = [];
               const binds = [];
+              const diffs = [];
               for (const [key, col] of Object.entries(allowed)) {
                   if (Object.prototype.hasOwnProperty.call(u, key)) {
                       sets.push(`${col} = ?`);
                       binds.push(u[key]);
+
+                      // Diff tracking (compare against existing row's corresponding column)
+                      const oldVal = existing ? existing[col] : null;
+                      const newVal = u[key];
+                      const oldS = oldVal === null || oldVal === undefined ? '' : String(oldVal);
+                      const newS = newVal === null || newVal === undefined ? '' : String(newVal);
+                      if (oldS !== newS) {
+                        diffs.push({ field: col, oldValue: oldVal ?? null, newValue: newVal ?? null });
+                      }
                   }
               }
 
@@ -487,6 +796,24 @@ export default {
               ).bind(...binds).first();
 
               if (row) updatedItems.push(mapEquipmentRowToApi(row));
+
+              if (diffs.length > 0) {
+                // Special-case: if accountingName changed, record previousAccountingName logic is handled in /api/equipment;
+                // here we just log the explicit diffs.
+                await insertEquipmentChangeLogs(
+                  env.DB,
+                  diffs.map(d => ({
+                    equipmentId: id,
+                    field: d.field,
+                    oldValue: d.oldValue,
+                    newValue: d.newValue,
+                    changedAt: now,
+                    changedBy: null,
+                    source: 'review_bulk_update',
+                    correlationId,
+                  }))
+                );
+              }
           }
 
           return Response.json({ items: updatedItems }, { headers: corsHeaders });

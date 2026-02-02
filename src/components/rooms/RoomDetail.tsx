@@ -142,12 +142,12 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
   const housedEquipment = useMemo(() => {
       if (!selectedBuilding || !selectedRoom) return [];
       const equipment = selectedBuilding.equipment.filter(
-          eq => eq.Room === selectedRoom.RoomNumber && eq.Location === selectedBuilding.code
+          eq => eq.room === selectedRoom.RoomNumber && eq.Location === selectedBuilding.code
       );
       
       // Sort alphabetically by Equipment name
       return equipment.sort((a, b) => 
-        (a.Equipment || '').localeCompare(b.Equipment || '', undefined, { sensitivity: 'base' })
+        (a.accountingName || '').localeCompare(b.accountingName || '', undefined, { sensitivity: 'base' })
       );
   }, [selectedBuilding, selectedRoom]);
 
@@ -525,11 +525,11 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                           <div className="flex items-start justify-between gap-3">
                                               <div className="flex-1 min-w-0">
                                                   <div className="font-semibold text-slate-800 hover:text-brand-600 transition-colors truncate">
-                                                      {eq.Equipment}
+                                                      {eq.accountingName}
                                                   </div>
-                                                  {eq.EquipmentDesc && (
+                                                  {eq.description && (
                                                       <div className="text-sm text-slate-600 mt-1 line-clamp-2">
-                                                          {eq.EquipmentDesc}
+                                                          {eq.description}
                                                       </div>
                                                   )}
                                               </div>
@@ -572,7 +572,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                                               >
                                                                   <img
                                                                       src={url}
-                                                                      alt={`Equipment ${eq.Equipment} ${idx + 1}`}
+                                                                      alt={`Equipment ${eq.accountingName} ${idx + 1}`}
                                                                       loading="lazy"
                                                                       className="h-28 w-28 rounded-md object-cover border border-slate-200"
                                                                   />

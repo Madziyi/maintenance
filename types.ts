@@ -1,21 +1,27 @@
 export interface Equipment {
   id: string; // Unique ID generated from CSV index
-  Equipment: string;
-  EquipmentDesc: string;
-  Notes: string;
+  /** Accounting-facing name string (primary). */
+  accountingName: string;
+  /** Previous accounting name (single-step history). */
+  previousAccountingName?: string | null;
+  /** Maintenance/SCADA name/tag. */
+  scadaName?: string | null;
+
+  description: string;
+  notes: string;
   Location: string; // Building Code (e.g., BIO)
   LocationDesc: string; // Building Name
-  Room: string;
+  room: string;
   KeyAccess: string;
   AssetTag: string;
-  SerialNum: string;
-  Manufacturer: string;
+  serialNum: string;
+  manufacturer: string;
   Model?: string;
-  Vendor: string;
+  vendor: string;
   PurchaseDate: string;
   WarrantyDate: string;
   images: string[]; // URLs/Base64 strings
-  status: 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN';
+  status: 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'REMOVED' | 'UNKNOWN';
 
   // Review metadata (ISO timestamps in UTC)
   createdAt?: string | null;

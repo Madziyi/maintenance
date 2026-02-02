@@ -137,7 +137,10 @@ export const api = {
     updates: Array<
       Pick<Equipment, 'id'> &
         Partial<
-          Pick<Equipment, 'Equipment' | 'EquipmentDesc' | 'Room' | 'Notes' | 'Manufacturer' | 'SerialNum' | 'Vendor' | 'status'>
+          Pick<
+            Equipment,
+            'accountingName' | 'scadaName' | 'description' | 'room' | 'notes' | 'manufacturer' | 'serialNum' | 'vendor' | 'status'
+          >
         >
     >
   ): Promise<Equipment[]> => {
@@ -175,6 +178,100 @@ export const api = {
       }
       const data = await res.json();
       return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
+  // Exports (Sheets A/B/C)
+  getExportSheetA: async (): Promise<Equipment[]> => {
+    return withSentryTracking("API: getExportSheetA", async () => {
+      const res = await fetch(`${API_URL}/api/exports/sheet-a?format=json`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/exports/sheet-a:", text);
+        const error = new Error(`Failed to fetch Sheet A: ${text}`);
+        trackApiError('/api/exports/sheet-a', res.status, text, error);
+        throw error;
+      }
+      const data = await res.json();
+      return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
+  downloadExportSheetA: async (): Promise<string> => {
+    return withSentryTracking("API: downloadExportSheetA", async () => {
+      const res = await fetch(`${API_URL}/api/exports/sheet-a?format=csv`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/exports/sheet-a csv:", text);
+        const error = new Error(`Failed to download Sheet A: ${text}`);
+        trackApiError('/api/exports/sheet-a', res.status, text, error);
+        throw error;
+      }
+      return await res.text();
+    });
+  },
+
+  getExportSheetB: async (): Promise<Equipment[]> => {
+    return withSentryTracking("API: getExportSheetB", async () => {
+      const res = await fetch(`${API_URL}/api/exports/sheet-b?format=json`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/exports/sheet-b:", text);
+        const error = new Error(`Failed to fetch Sheet B: ${text}`);
+        trackApiError('/api/exports/sheet-b', res.status, text, error);
+        throw error;
+      }
+      const data = await res.json();
+      return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
+  downloadExportSheetB: async (): Promise<string> => {
+    return withSentryTracking("API: downloadExportSheetB", async () => {
+      const res = await fetch(`${API_URL}/api/exports/sheet-b?format=csv`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/exports/sheet-b csv:", text);
+        const error = new Error(`Failed to download Sheet B: ${text}`);
+        trackApiError('/api/exports/sheet-b', res.status, text, error);
+        throw error;
+      }
+      return await res.text();
+    });
+  },
+
+  getExportSheetC: async (sinceIso: string): Promise<Array<{ equipment: Equipment; lastChangedAt: string | null; changedFields: string[] }>> => {
+    return withSentryTracking("API: getExportSheetC", async () => {
+      const qs = new URLSearchParams();
+      qs.set('format', 'json');
+      qs.set('since', sinceIso);
+      const res = await fetch(`${API_URL}/api/exports/sheet-c?${qs.toString()}`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/exports/sheet-c:", text);
+        const error = new Error(`Failed to fetch Sheet C: ${text}`);
+        trackApiError('/api/exports/sheet-c', res.status, text, error);
+        throw error;
+      }
+      const data = await res.json();
+      return Array.isArray(data?.items) ? data.items : [];
+    });
+  },
+
+  downloadExportSheetC: async (sinceIso: string): Promise<string> => {
+    return withSentryTracking("API: downloadExportSheetC", async () => {
+      const qs = new URLSearchParams();
+      qs.set('format', 'csv');
+      qs.set('since', sinceIso);
+      const res = await fetch(`${API_URL}/api/exports/sheet-c?${qs.toString()}`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("API Error /api/exports/sheet-c csv:", text);
+        const error = new Error(`Failed to download Sheet C: ${text}`);
+        trackApiError('/api/exports/sheet-c', res.status, text, error);
+        throw error;
+      }
+      return await res.text();
     });
   },
 

@@ -42,13 +42,16 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   // Equipment form state
   const [isAddingEquipment, setIsAddingEquipment] = useState(false);
   const [newEquipmentName, setNewEquipmentName] = useState('');
+  const [newEquipmentScadaName, setNewEquipmentScadaName] = useState('');
   const [newEquipmentDesc, setNewEquipmentDesc] = useState('');
   const [newEquipmentRoom, setNewEquipmentRoom] = useState('');
   const [newEquipmentManufacturer, setNewEquipmentManufacturer] = useState('');
   const [newEquipmentVendor, setNewEquipmentVendor] = useState('');
   const [newEquipmentSerialNum, setNewEquipmentSerialNum] = useState('');
   const [newEquipmentNotes, setNewEquipmentNotes] = useState('');
-  const [newEquipmentStatus, setNewEquipmentStatus] = useState<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'>('UNKNOWN');
+  const [newEquipmentStatus, setNewEquipmentStatus] = useState<
+    'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'REMOVED' | 'UNKNOWN'
+  >('UNKNOWN');
   const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
   const [isSavingEquipment, setIsSavingEquipment] = useState(false);
   const [isUploadingEquipmentImages, setIsUploadingEquipmentImages] = useState(false);
@@ -174,14 +177,21 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   // Equipment filter options
   const equipmentDescriptionOptions = useMemo(() => {
     const descriptions = selectedBuilding.equipment
-      .map(e => e.EquipmentDesc?.trim())
+      .map(e => e.description?.trim())
       .filter(d => d && d !== '')
       .filter((d, i, arr) => arr.indexOf(d) === i)
       .sort();
     return descriptions;
   }, [selectedBuilding.equipment]);
   
-  const statusOptions: Array<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'> = ['INACTIVE', 'ONSHELF', 'OPERATING', 'REPAIR', 'UNKNOWN'];
+  const statusOptions: Array<'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'REMOVED' | 'UNKNOWN'> = [
+    'INACTIVE',
+    'ONSHELF',
+    'OPERATING',
+    'REPAIR',
+    'REMOVED',
+    'UNKNOWN',
+  ];
   
   const statusOptionsWithCounts = useMemo(() => {
     return statusOptions.map(status => ({
@@ -193,7 +203,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
   // Filtered equipment
   const filteredEquipment = useMemo(() => {
     const filtered = selectedBuilding.equipment.filter(eq => {
-      const eqDesc = eq.EquipmentDesc?.trim() || '';
+      const eqDesc = eq.description?.trim() || '';
       const eqStatus = eq.status || 'UNKNOWN';
       
       const descMatch = selectedEquipmentDescriptions.length === 0 ||
@@ -207,7 +217,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
     
     // Sort alphabetically by Equipment name
     return filtered.sort((a, b) => 
-      (a.Equipment || '').localeCompare(b.Equipment || '', undefined, { sensitivity: 'base' })
+      (a.accountingName || '').localeCompare(b.accountingName || '', undefined, { sensitivity: 'base' })
     );
   }, [selectedBuilding.equipment, selectedEquipmentDescriptions, selectedStatuses]);
   
@@ -252,18 +262,20 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       if (!canEdit) return;
       if (equipmentToDuplicate) {
           // Pre-fill form with equipment data (excluding images)
-          setNewEquipmentName(equipmentToDuplicate.Equipment || '');
-          setNewEquipmentDesc(equipmentToDuplicate.EquipmentDesc || '');
-          setNewEquipmentRoom(equipmentToDuplicate.Room || '');
-          setNewEquipmentManufacturer(equipmentToDuplicate.Manufacturer || '');
-          setNewEquipmentVendor(equipmentToDuplicate.Vendor || '');
-          setNewEquipmentSerialNum(equipmentToDuplicate.SerialNum || '');
-          setNewEquipmentNotes(equipmentToDuplicate.Notes || '');
+          setNewEquipmentName(equipmentToDuplicate.accountingName || '');
+          setNewEquipmentScadaName(equipmentToDuplicate.scadaName || '');
+          setNewEquipmentDesc(equipmentToDuplicate.description || '');
+          setNewEquipmentRoom(equipmentToDuplicate.room || '');
+          setNewEquipmentManufacturer(equipmentToDuplicate.manufacturer || '');
+          setNewEquipmentVendor(equipmentToDuplicate.vendor || '');
+          setNewEquipmentSerialNum(equipmentToDuplicate.serialNum || '');
+          setNewEquipmentNotes(equipmentToDuplicate.notes || '');
           setNewEquipmentStatus(equipmentToDuplicate.status || 'UNKNOWN');
           setNewEquipmentImages([]); // Don't copy images
       } else {
           // Reset form for new equipment
           setNewEquipmentName('');
+          setNewEquipmentScadaName('');
           setNewEquipmentDesc('');
           setNewEquipmentRoom('');
           setNewEquipmentManufacturer('');
@@ -356,18 +368,21 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       try {
           const newEq: Equipment = {
               id: `EQ-NEW-${Date.now()}`,
-              Equipment: newEquipmentName.trim(),
-              EquipmentDesc: newEquipmentDesc.trim(),
-              Notes: newEquipmentNotes.trim(),
+              accountingName: newEquipmentName.trim(),
+              previousAccountingName: null,
+              scadaName: newEquipmentScadaName.trim() || null,
+
+              description: newEquipmentDesc.trim(),
+              notes: newEquipmentNotes.trim(),
               Location: selectedBuilding.code,
               LocationDesc: selectedBuilding.name,
-              Room: newEquipmentRoom || '',
+              room: newEquipmentRoom || '',
               KeyAccess: '',
               AssetTag: '',
-              SerialNum: newEquipmentSerialNum.trim(),
-              Manufacturer: newEquipmentManufacturer.trim(),
+              serialNum: newEquipmentSerialNum.trim(),
+              manufacturer: newEquipmentManufacturer.trim(),
               Model: '',
-              Vendor: newEquipmentVendor.trim(),
+              vendor: newEquipmentVendor.trim(),
               PurchaseDate: '',
               WarrantyDate: '',
               images: newEquipmentImages,
@@ -379,6 +394,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
           // Reset form and stay on building detail page
           setIsAddingEquipment(false);
           setNewEquipmentName('');
+          setNewEquipmentScadaName('');
           setNewEquipmentDesc('');
           setNewEquipmentRoom('');
           setNewEquipmentManufacturer('');
@@ -679,7 +695,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                       <div className="space-y-4">
                           <div>
                               <label className="block text-sm font-bold text-slate-600 mb-1">
-                                  Equipment Name <span className="text-red-500">*</span>
+                                  Accounting Name <span className="text-red-500">*</span>
                               </label>
                               <input
                                   type="text"
@@ -693,6 +709,17 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                           handleSaveNewEquipment();
                                       }
                                   }}
+                              />
+                          </div>
+
+                          <div>
+                              <label className="block text-sm font-bold text-slate-600 mb-1">SCADA Name</label>
+                              <input
+                                  type="text"
+                                  value={newEquipmentScadaName}
+                                  onChange={(e) => setNewEquipmentScadaName(e.target.value)}
+                                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  placeholder="SCADA tag/name (optional)"
                               />
                           </div>
                           
@@ -747,6 +774,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       <option value="REPAIR">Repair</option>
                                       <option value="INACTIVE">Inactive</option>
                                       <option value="ONSHELF">On Shelf</option>
+                                      <option value="REMOVED">Removed</option>
                                   </select>
                               </div>
                           </div>
@@ -1462,7 +1490,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                                   />
                                                   <span className="text-sm text-slate-700 flex-1 line-clamp-1" title={desc}>{desc}</span>
                                                   <span className="text-xs text-slate-400">
-                                                      ({selectedBuilding.equipment.filter(e => e.EquipmentDesc?.trim() === desc).length})
+                                                      ({selectedBuilding.equipment.filter(e => e.description?.trim() === desc).length})
                                                   </span>
                                               </label>
                                           ))
@@ -1640,11 +1668,11 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                                               className={`transition-transform ${isExpanded ? 'rotate-90 text-brand-600' : 'text-slate-300'}`}
                                                           />
                                                       </button>
-                                                      <span className="truncate">{eq.Equipment}</span>
+                                                      <span className="truncate">{eq.accountingName}</span>
                                                   </div>
                                               </td>
-                                              <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{eq.EquipmentDesc || '—'}</td>
-                                              <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{eq.Room || '—'}</td>
+                                              <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{eq.description || '—'}</td>
+                                              <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{eq.room || '—'}</td>
                                               <td className="py-3.5 px-4">
                                                   <span className={`text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap ${
                                                     eq.status === 'OPERATING' ? 'bg-green-50 text-green-700 border border-green-200' :
@@ -1681,7 +1709,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                                                   >
                                                                       <img
                                                                           src={url}
-                                                                          alt={`Equipment ${eq.Equipment} ${idx + 1}`}
+                                                                          alt={`Equipment ${eq.accountingName} ${idx + 1}`}
                                                                           loading="lazy"
                                                                           className="h-36 w-36 rounded-md object-cover border border-slate-200"
                                                                       />
@@ -1728,7 +1756,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-1.5 mb-1">
                                               <span className="font-semibold text-sm text-slate-900 truncate">
-                                                  {eq.Equipment}
+                                                  {eq.accountingName}
                                               </span>
                                               {canEdit && (
                                                   <button
@@ -1744,15 +1772,15 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                                   </button>
                                               )}
                                           </div>
-                                          {eq.EquipmentDesc && (
+                                          {eq.description && (
                                               <div className="text-sm text-slate-600 line-clamp-2">
-                                                  {eq.EquipmentDesc}
+                                                  {eq.description}
                                               </div>
                                           )}
                                           <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
-                                              {eq.Room && (
+                                              {eq.room && (
                                                   <span className="truncate">
-                                                      <span className="font-medium">Room:</span> {eq.Room}
+                                                      <span className="font-medium">Room:</span> {eq.room}
                                                   </span>
                                               )}
                                           </div>
@@ -1813,7 +1841,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                                       >
                                                           <img
                                                               src={url}
-                                                              alt={`Equipment ${eq.Equipment} ${idx + 1}`}
+                                                              alt={`Equipment ${eq.accountingName} ${idx + 1}`}
                                                               loading="lazy"
                                                               className="h-32 w-32 rounded-md object-cover border border-slate-200"
                                                           />

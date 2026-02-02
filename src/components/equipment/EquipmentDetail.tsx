@@ -47,8 +47,8 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
 
   const handleShare = async () => {
     const url = `${window.location.origin}/equipment/${equipment.id}`;
-    const title = equipment.Equipment || 'Equipment';
-    const text = equipment.EquipmentDesc || 'Equipment details';
+    const title = equipment.accountingName || 'Equipment';
+    const text = equipment.description || 'Equipment details';
 
     try {
       if (navigator.share) {
@@ -177,13 +177,41 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
         <div className="p-6 md:p-8 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
           {isEditing ? (
             <div className="space-y-4">
-              <input value={form.Equipment} onChange={e => setForm({...form, Equipment: e.target.value})} className="text-2xl md:text-3xl font-bold bg-white/10 p-2 rounded w-full border border-white/20 text-white placeholder-white/50" placeholder="Equipment Name"/>
-              <input value={form.EquipmentDesc} onChange={e => setForm({...form, EquipmentDesc: e.target.value})} className="text-base md:text-lg bg-white/10 p-2 rounded w-full border border-white/20 text-white placeholder-white/50" placeholder="Description"/>
+              <input
+                value={form.accountingName}
+                onChange={e => setForm({ ...form, accountingName: e.target.value })}
+                className="text-2xl md:text-3xl font-bold bg-white/10 p-2 rounded w-full border border-white/20 text-white placeholder-white/50"
+                placeholder="Accounting Name"
+              />
+              <input
+                value={form.scadaName || ''}
+                onChange={e => setForm({ ...form, scadaName: e.target.value })}
+                className="text-base md:text-lg bg-white/10 p-2 rounded w-full border border-white/20 text-white placeholder-white/50"
+                placeholder="SCADA Name (optional)"
+              />
+              <input
+                value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })}
+                className="text-base md:text-lg bg-white/10 p-2 rounded w-full border border-white/20 text-white placeholder-white/50"
+                placeholder="Description"
+              />
             </div>
           ) : (
             <div>
-              <h1 className="text-2xl md:text-3xl font-semibold break-all">{equipment.Equipment}</h1>
-              <p className="text-slate-300 mt-2 text-base md:text-lg">{equipment.EquipmentDesc}</p>
+              <h1 className="text-2xl md:text-3xl font-semibold break-all">{equipment.accountingName}</h1>
+              {equipment.previousAccountingName &&
+              equipment.previousAccountingName.trim() !== '' &&
+              equipment.previousAccountingName !== equipment.accountingName ? (
+                <p className="text-slate-300 mt-2 text-sm">
+                  Previous accounting name: <span className="font-medium">{equipment.previousAccountingName}</span>
+                </p>
+              ) : null}
+              {equipment.scadaName ? (
+                <p className="text-slate-300 mt-2 text-sm">
+                  SCADA name: <span className="font-medium">{equipment.scadaName}</span>
+                </p>
+              ) : null}
+              <p className="text-slate-300 mt-2 text-base md:text-lg">{equipment.description}</p>
             </div>
           )}
         </div>
@@ -217,9 +245,9 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                 <div>
                   <dt className="text-slate-500 text-xs uppercase font-bold mb-1">Room</dt>
                   {isEditing ? (
-                    <input value={form.Room} onChange={e => setForm({...form, Room: e.target.value})} className="border rounded p-2 w-full" />
+                    <input value={form.room} onChange={e => setForm({ ...form, room: e.target.value })} className="border rounded p-2 w-full" />
                   ) : (
-                    <dd className="font-medium text-slate-800 text-lg">{form.Room || "N/A"}</dd>
+                    <dd className="font-medium text-slate-800 text-lg">{form.room || "N/A"}</dd>
                   )}
                 </div>
               </div>
@@ -231,9 +259,9 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               </h3>
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {[
-                  {label: "Manufacturer", key: "Manufacturer"},
-                  {label: "Serial Number", key: "SerialNum"},
-                  {label: "Vendor", key: "Vendor"},
+                  {label: "Manufacturer", key: "manufacturer"},
+                  {label: "Serial Number", key: "serialNum"},
+                  {label: "Vendor", key: "vendor"},
                   {label: "Status", key: "status", isStatus: true},
                 ].map(({label, key, isStatus}) => (
                   <div key={key}>
@@ -242,13 +270,25 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                       isStatus ? (
                         <select
                           value={form.status || 'UNKNOWN'}
-                          onChange={e => setForm({...form, status: e.target.value as 'INACTIVE' | 'ONSHELF' | 'OPERATING' | 'REPAIR' | 'UNKNOWN'})}
+                          onChange={e =>
+                            setForm({
+                              ...form,
+                              status: e.target.value as
+                                | 'INACTIVE'
+                                | 'ONSHELF'
+                                | 'OPERATING'
+                                | 'REPAIR'
+                                | 'REMOVED'
+                                | 'UNKNOWN',
+                            })
+                          }
                           className="border rounded p-2 w-full text-sm"
                         >
                           <option value="INACTIVE">INACTIVE</option>
                           <option value="ONSHELF">ONSHELF</option>
                           <option value="OPERATING">OPERATING</option>
                           <option value="REPAIR">REPAIR</option>
+                          <option value="REMOVED">REMOVED</option>
                           <option value="UNKNOWN">UNKNOWN</option>
                         </select>
                       ) : (
@@ -270,14 +310,14 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               </h3>
               {isEditing ? (
                 <textarea 
-                  value={form.Notes || ''} 
-                  onChange={e => setForm({...form, Notes: e.target.value})} 
+                  value={form.notes || ''} 
+                  onChange={e => setForm({ ...form, notes: e.target.value })} 
                   className="border rounded p-3 w-full min-h-[120px] resize-y text-sm"
                   placeholder="Add notes about this equipment..."
                 />
               ) : (
                 <div className="text-slate-700 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg border border-slate-100 min-h-[120px]">
-                  {form.Notes || 'No notes'}
+                  {form.notes || 'No notes'}
                 </div>
               )}
             </section>
