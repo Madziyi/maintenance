@@ -288,7 +288,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                           <option value="ONSHELF">ONSHELF</option>
                           <option value="OPERATING">OPERATING</option>
                           <option value="REPAIR">REPAIR</option>
-                          <option value="REMOVED">REMOVED</option>
+                          <option value="REMOVED">DELETED</option>
                           <option value="UNKNOWN">UNKNOWN</option>
                         </select>
                       ) : (
@@ -297,7 +297,11 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                       )
                     ) : (
                       // @ts-ignore
-                      <dd className="font-medium text-slate-800 break-words">{key === 'status' ? (form.status || 'UNKNOWN') : (form[key] || "-")}</dd>
+                      <dd className="font-medium text-slate-800 break-words">
+                        {key === 'status'
+                          ? ((form.status || 'UNKNOWN') === 'REMOVED' ? 'Deleted' : (form.status || 'UNKNOWN'))
+                          : (form[key] || "-")}
+                      </dd>
                     )}
                   </div>
                 ))}

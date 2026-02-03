@@ -125,7 +125,7 @@ export const ExportsPage: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <SheetCard
-          title="Sheet A — NEW (missing accountingName)"
+          title="Sheet A — NEW (NewEquipment = true)"
           subtitle={`${sheetA.length} rows`}
           loading={loadingA}
           onRefresh={loadA}
@@ -141,19 +141,19 @@ export const ExportsPage: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
               scadaName: e.scadaName || '',
               location: e.LocationDesc || e.Location,
               room: e.room,
-              status: e.status,
+              status: e.status === 'REMOVED' ? 'Deleted' : e.status,
             }))}
           />
         </SheetCard>
 
         <SheetCard
-          title="Sheet B — REMOVED"
+          title="Sheet B — Deleted"
           subtitle={`${sheetB.length} rows`}
           loading={loadingB}
           onRefresh={loadB}
           onDownload={async () => {
             const csv = await api.downloadExportSheetB();
-            downloadTextFile(`sheet_b_removed_${new Date().toISOString().slice(0, 10)}.csv`, csv, 'text/csv;charset=utf-8;');
+            downloadTextFile(`sheet_b_deleted_${new Date().toISOString().slice(0, 10)}.csv`, csv, 'text/csv;charset=utf-8;');
           }}
         >
           <PreviewTable
@@ -163,7 +163,7 @@ export const ExportsPage: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
               scadaName: e.scadaName || '',
               location: e.LocationDesc || e.Location,
               room: e.room,
-              status: e.status,
+              status: e.status === 'REMOVED' ? 'Deleted' : e.status,
             }))}
           />
         </SheetCard>

@@ -6,6 +6,39 @@ import { MaintenanceRoom } from '@/types';
 import { api } from '@/api';
 import { useToast } from '../common/Toast';
 
+const STATUS_PILLS: Record<string, { label: string; className: string }> = {
+  OPERATING: {
+    label: "Operating",
+    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
+  },
+  INACTIVE: {
+    label: "Inactive",
+    className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  },
+  REMOVED: {
+    label: "Deleted",
+    className: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+  },
+  UNKNOWN: {
+    label: "Unknown",
+    className: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
+  },
+  REPAIR: {
+    label: "Repair",
+    className: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
+  },
+  "ON-SHELF": {
+    label: "On-Shelf",
+    className: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400",
+  },
+};
+
+function getStatusPill(status: string | null | undefined) {
+  const raw = (status || 'UNKNOWN').toString();
+  const key = raw === 'ONSHELF' ? 'ON-SHELF' : raw;
+  return STATUS_PILLS[key] || STATUS_PILLS.UNKNOWN;
+}
+
 interface BuildingDetailProps {
   data: BuildingData[];
   onUpdateBuilding: (buildingCode: string, updates: Partial<BuildingData>) => Promise<void>;
@@ -774,7 +807,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       <option value="REPAIR">Repair</option>
                                       <option value="INACTIVE">Inactive</option>
                                       <option value="ONSHELF">On Shelf</option>
-                                      <option value="REMOVED">Removed</option>
+                                      <option value="REMOVED">Deleted</option>
                                   </select>
                               </div>
                           </div>
@@ -1674,15 +1707,14 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                               <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{eq.description || '—'}</td>
                                               <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{eq.room || '—'}</td>
                                               <td className="py-3.5 px-4">
-                                                  <span className={`text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap ${
-                                                    eq.status === 'OPERATING' ? 'bg-green-50 text-green-700 border border-green-200' :
-                                                    eq.status === 'REPAIR' ? 'bg-red-50 text-red-700 border border-red-200' :
-                                                    eq.status === 'INACTIVE' ? 'bg-slate-100 text-slate-600 border border-slate-200' :
-                                                    eq.status === 'ONSHELF' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
-                                                    'bg-slate-100 text-slate-500 border border-slate-200'
-                                                  }`}>
-                                                      {eq.status || 'UNKNOWN'}
-                                                  </span>
+                                                  {(() => {
+                                                    const pill = getStatusPill(eq.status);
+                                                    return (
+                                                      <span className={`text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap ${pill.className}`}>
+                                                        {pill.label}
+                                                      </span>
+                                                    );
+                                                  })()}
                                               </td>
                                           </tr>
                                           {isExpanded && (

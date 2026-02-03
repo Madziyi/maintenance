@@ -16,6 +16,10 @@ type Props = {
 
 const STATUSES: Equipment['status'][] = ['OPERATING', 'REPAIR', 'ONSHELF', 'INACTIVE', 'REMOVED', 'UNKNOWN'];
 
+function statusLabel(status?: string | null) {
+  return status === 'REMOVED' ? 'Deleted' : (status || 'UNKNOWN');
+}
+
 function formatIsoShort(iso?: string | null) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -630,7 +634,7 @@ const PhotoReviewView: React.FC<{
                 <div className="text-xs text-slate-500 mt-0.5 truncate">{eq.description}</div>
               ) : null}
               <div className="text-xs text-slate-400 mt-0.5 truncate">
-                {(eq.LocationDesc || eq.Location) || '—'} • Room {eq.room || '—'} • {eq.status}
+                {(eq.LocationDesc || eq.Location) || '—'} • Room {eq.room || '—'} • {statusLabel(eq.status)}
               </div>
             </button>
           ))}
@@ -666,7 +670,7 @@ const PhotoReviewView: React.FC<{
               <span className="mx-2">•</span>
               Room {current.room || '—'}
               <span className="mx-2">•</span>
-              {current.status}
+              {statusLabel(current.status)}
               {(current.manufacturer || current.serialNum) ? <span className="mx-2">•</span> : null}
               {current.manufacturer ? <span> Mfr: {current.manufacturer}</span> : null}
               {current.serialNum ? <span> {current.manufacturer ? '•' : ''} S/N: {current.serialNum}</span> : null}
@@ -802,7 +806,7 @@ const PhotoReviewView: React.FC<{
                 >
                   {STATUSES.map(s => (
                     <option key={s} value={s}>
-                      {s}
+                      {s === 'REMOVED' ? 'DELETED' : s}
                     </option>
                   ))}
                 </select>

@@ -448,14 +448,68 @@ const App = () => {
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
           <div className="md:hidden absolute inset-0 z-40 bg-brand-900 text-white p-6 desktop-header-menu">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
+                  <MapPin className="text-white" size={18} />
+                </div>
+                <span className="text-lg font-bold">WayFinder</span>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-2 hover:bg-brand-800 rounded-lg transition-colors"
+                aria-label="Close menu"
+              >
+                <X size={22} />
+              </button>
+            </div>
             <div className="flex flex-col space-y-4">
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Dashboard</button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/building'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Buildings</button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment</button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment-review'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment Review</button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/exports'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Exports</button>
-              <button onClick={() => { setIsMobileMenuOpen(false); navigate('/rooms'); }} className="text-left p-3 hover:bg-brand-800 rounded-lg">Equipment Rooms</button>
-              <button onClick={handleLogout} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg">Logout</button>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }}
+                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+              >
+                <LayoutDashboard size={18} />
+                <span>Dashboard</span>
+              </button>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); navigate('/building'); }}
+                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+              >
+                <BuildingIcon size={18} />
+                <span>Buildings</span>
+              </button>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment'); }}
+                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+              >
+                <Wrench size={18} />
+                <span>Equipment</span>
+              </button>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment-review'); }}
+                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+              >
+                <Check size={18} />
+                <span>Equipment Review</span>
+              </button>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); navigate('/exports'); }}
+                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+              >
+                <Download size={18} />
+                <span>Exports</span>
+              </button>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); navigate('/rooms'); }}
+                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+              >
+                <MapPin size={18} />
+                <span>Equipment Rooms</span>
+              </button>
+              <button onClick={handleLogout} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg flex items-center gap-3">
+                <LogOut size={18} />
+                <span>Logout</span>
+              </button>
                 </div>
             </div>
         )}

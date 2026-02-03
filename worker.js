@@ -347,7 +347,7 @@ export default {
           `SELECT e.*, b.Building as BuildingName
            FROM Equipment e
            LEFT JOIN Buildings b ON b.Location = e.Location
-           WHERE (e.accountingName IS NULL OR TRIM(e.accountingName) = '')
+           WHERE COALESCE(e.NewEquipment, 0) = 1
              AND COALESCE(e.Status,'UNKNOWN') != 'REMOVED'
            ORDER BY COALESCE(e.updatedAt, e.createdAt, '') DESC`
         ).all();
@@ -537,6 +537,15 @@ export default {
       if (url.pathname === '/api/equipment' && method === 'POST') {
           const e = await request.json();
           const imagesJson = JSON.stringify(e.images || []);
+          const newEquipmentFlag =
+            e?.NewEquipment === true ||
+            e?.NewEquipment === 1 ||
+            e?.NewEquipment === '1' ||
+            e?.newEquipment === true ||
+            e?.newEquipment === 1 ||
+            e?.newEquipment === '1'
+              ? 1
+              : 0;
           
           const isNew = isNaN(Number(e.id));
           const now = isoNow();
@@ -560,8 +569,8 @@ export default {
                 { field: 'Status', oldValue: null, newValue: e.status || 'UNKNOWN' },
               ];
               result = await env.DB.prepare(`
-                INSERT INTO Equipment (accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status, createdAt, updatedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+                INSERT INTO Equipment (accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status, createdAt, updatedAt, NewEquipment)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
               `).bind(
                 e.accountingName || '',
                 e.previousAccountingName || null,
@@ -576,10 +585,12 @@ export default {
                 imagesJson,
                 e.status || 'UNKNOWN',
                 now,
-                now
+                now,
+                newEquipmentFlag
               ).first();
 
-              if (result) {
+              // Only write changelog for "existing-tag" equipment (NewEquipment=0)
+              if (result && newEquipmentFlag === 0) {
                 await insertEquipmentChangeLogs(
                   env.DB,
                   createEntries.map(x => ({
@@ -596,7 +607,7 @@ export default {
               }
           } else {
               const existing = await env.DB.prepare(
-                'SELECT accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status FROM Equipment WHERE id=?'
+                'SELECT accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status, COALESCE(NewEquipment,0) as NewEquipment FROM Equipment WHERE id=?'
               ).bind(e.id).first();
               const oldName = existing?.accountingName || '';
               const nextName = (e.accountingName || '').trim();
@@ -647,7 +658,8 @@ export default {
                 e.id
               ).first();
 
-              if (result && diffs.length > 0) {
+              // Only write changelog for "existing-tag" equipment (NewEquipment=0)
+              if (result && diffs.length > 0 && Number(existing?.NewEquipment || 0) === 0) {
                 await insertEquipmentChangeLogs(
                   env.DB,
                   diffs.map(d => ({
@@ -764,7 +776,7 @@ export default {
               if (!id) continue;
 
               const existing = await env.DB.prepare(
-                'SELECT accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status FROM Equipment WHERE id=?'
+                'SELECT accountingName, previousAccountingName, scadaName, Description, Location, Room_Raw, Notes, Serial_Num, Manufacturer, Vendor, Images, Status, COALESCE(NewEquipment,0) as NewEquipment FROM Equipment WHERE id=?'
               ).bind(id).first();
 
               const sets = [];
@@ -797,7 +809,8 @@ export default {
 
               if (row) updatedItems.push(mapEquipmentRowToApi(row));
 
-              if (diffs.length > 0) {
+              // Only write changelog for "existing-tag" equipment (NewEquipment=0)
+              if (diffs.length > 0 && Number(existing?.NewEquipment || 0) === 0) {
                 // Special-case: if accountingName changed, record previousAccountingName logic is handled in /api/equipment;
                 // here we just log the explicit diffs.
                 await insertEquipmentChangeLogs(

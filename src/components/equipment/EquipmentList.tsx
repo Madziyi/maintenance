@@ -6,6 +6,42 @@ import { api } from '../../../api';
 import { useToast } from '@/src/components/common/Toast';
 import { fuzzyMatch } from '@/src/utils/fuzzySearch';
 
+const STATUS_PILLS: Record<
+  string,
+  { label: string; className: string }
+> = {
+  OPERATING: {
+    label: "Operating",
+    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
+  },
+  INACTIVE: {
+    label: "Inactive",
+    className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  },
+  REMOVED: {
+    label: "Deleted",
+    className: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+  },
+  UNKNOWN: {
+    label: "Unknown",
+    className: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
+  },
+  REPAIR: {
+    label: "Repair",
+    className: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
+  },
+  "ON-SHELF": {
+    label: "On-Shelf",
+    className: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400",
+  },
+};
+
+function getStatusPill(status: string | null | undefined) {
+  const raw = (status || 'UNKNOWN').toString();
+  const key = raw === 'ONSHELF' ? 'ON-SHELF' : raw;
+  return STATUS_PILLS[key] || STATUS_PILLS.UNKNOWN;
+}
+
 interface EquipmentListProps {
   data: BuildingData[];
   onSelectEquipment: (equipment: Equipment) => void;
@@ -1072,21 +1108,14 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                         <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.Location}</td>
                         <td className="py-3.5 px-4 text-sm text-slate-700 truncate">{e.room || "-"}</td>
                         <td className="py-3.5 px-4">
-                          <span
-                            className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
-                              e.status === 'OPERATING'
-                                ? 'bg-green-100 text-green-700 border border-green-200'
-                                : e.status === 'REPAIR'
-                                ? 'bg-red-100 text-red-700 border border-red-200'
-                                : e.status === 'INACTIVE'
-                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                : e.status === 'ONSHELF'
-                                ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                                : 'bg-slate-100 text-slate-500 border border-slate-200'
-                            }`}
-                          >
-                            {e.status || 'UNKNOWN'}
-                          </span>
+                          {(() => {
+                            const pill = getStatusPill(e.status);
+                            return (
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${pill.className}`}>
+                                {pill.label}
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                       {isExpanded && (
@@ -1167,21 +1196,14 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span
-                        className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
-                          e.status === 'OPERATING'
-                            ? 'bg-green-100 text-green-700 border border-green-200'
-                            : e.status === 'REPAIR'
-                            ? 'bg-red-100 text-red-700 border border-red-200'
-                            : e.status === 'INACTIVE'
-                            ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                            : e.status === 'ONSHELF'
-                            ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                            : 'bg-slate-100 text-slate-500 border border-slate-200'
-                        }`}
-                      >
-                        {e.status || 'UNKNOWN'}
-                      </span>
+                      {(() => {
+                        const pill = getStatusPill(e.status);
+                        return (
+                          <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${pill.className}`}>
+                            {pill.label}
+                          </span>
+                        );
+                      })()}
                       <button
                         type="button"
                         onClick={(ev) => {
