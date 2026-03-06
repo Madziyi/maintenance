@@ -7,13 +7,13 @@ import {
   useParams,
   useLocation
 } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Building as BuildingIcon, 
-  Search, 
-  MapPin, 
-  Wrench, 
-  ChevronRight, 
+import {
+  LayoutDashboard,
+  Building as BuildingIcon,
+  Search,
+  MapPin,
+  Wrench,
+  ChevronRight,
   ArrowLeft,
   Camera,
   Upload,
@@ -61,6 +61,7 @@ import { BuildingDetail } from './src/components/rooms/BuildingDetail';
 import { RoomDetail } from './src/components/rooms/RoomDetail';
 import { FloorPlanManager } from './src/components/rooms/FloorPlanManager';
 import { RoomList } from '@/src/components/rooms/RoomList';
+import { DataSpreadsheetPage } from '@/src/components/spreadsheet/DataSpreadsheetPage';
 
 // Static login credentials from environment variables
 const STATIC_USERNAME = import.meta.env.VITE_AUTH_USERNAME;
@@ -409,6 +410,7 @@ const App = () => {
             onClick={() => navigate('/equipment')}
           />
           <SidebarItem icon={Check} label="Equipment Review" active={location.pathname.startsWith('/equipment-review')} onClick={() => navigate('/equipment-review')} />
+          <SidebarItem icon={Database} label="Spreadsheet" active={location.pathname.startsWith('/spreadsheet')} onClick={() => navigate('/spreadsheet')} />
           <SidebarItem icon={Download} label="Exports" active={location.pathname.startsWith('/exports')} onClick={() => navigate('/exports')} />
           <SidebarItem icon={MapPin} label="Equipment Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
         </nav>
@@ -491,6 +493,13 @@ const App = () => {
               >
                 <Check size={18} />
                 <span>Equipment Review</span>
+              </button>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); navigate('/spreadsheet'); }}
+                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+              >
+                <Database size={18} />
+                <span>Spreadsheet</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/exports'); }}
@@ -584,6 +593,16 @@ const App = () => {
                 onSetFullScreenImage={(url) => handleSetFullScreenImage(url)}
               />
             } />
+            <Route
+              path="/spreadsheet"
+              element={
+                <DataSpreadsheetPage
+                  data={data}
+                  canEdit={isAuthenticated}
+                  onRefreshData={fetchData}
+                />
+              }
+            />
             <Route path="/exports" element={<ExportsPage canEdit={isAuthenticated} />} />
             <Route path="/building" element={
               <BuildingList 

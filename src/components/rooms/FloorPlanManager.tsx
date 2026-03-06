@@ -65,6 +65,7 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
   const [newPlanName, setNewPlanName] = useState('');
   const [uploadingPlan, setUploadingPlan] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [isDragOverNewPlan, setIsDragOverNewPlan] = useState(false);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!canEdit) return;
@@ -124,6 +125,48 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
               setEditingPlanId(null);
           }
       }
+  };
+
+  const uploadNewPlanFromFile = async (file: File) => {
+      if (!canEdit || !newPlanName.trim() || uploadingPlan) return;
+      if (!file.type.startsWith('image/')) return;
+      setUploadingPlan(true);
+      try {
+          const url = await api.uploadFile(file);
+          const slug = generateFloorPlanSlug(newPlanName, selectedBuilding.floorPlans);
+          const newPlan: FloorPlan = {
+              id: `FP-${Date.now()}`,
+              name: newPlanName,
+              imageUrl: url,
+              slug
+          };
+          await onUpdateFloorPlans(selectedBuilding.code, [...selectedBuilding.floorPlans, newPlan], newPlan);
+          setNewPlanName('');
+          setIsUploading(false);
+          showToast("Floor plan uploaded successfully", 'success');
+      } catch (e) {
+          showToast("Upload failed", 'error');
+      } finally {
+          setUploadingPlan(false);
+      }
+  };
+
+  const handleNewPlanDrop = async (e: React.DragEvent) => {
+      if (!canEdit || !newPlanName.trim() || uploadingPlan) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOverNewPlan(false);
+      const files = (Array.from(e.dataTransfer.files || []) as File[]).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+      await uploadNewPlanFromFile(files[0]);
+  };
+
+  const handleNewPlanPaste = (e: React.ClipboardEvent) => {
+      if (!canEdit || !newPlanName.trim() || uploadingPlan) return;
+      e.preventDefault();
+      const files = (Array.from(e.clipboardData.files || []) as File[]).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+      uploadNewPlanFromFile(files[0]);
   };
 
   const handleReplaceImage = (planId: string) => {
@@ -229,9 +272,20 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {canEdit && (
-              <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:bg-slate-50 transition-colors">
+              <div className={`bg-white border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center transition-colors ${isDragOverNewPlan ? 'border-brand-400 bg-brand-50' : 'border-slate-300'} ${!isUploading ? 'hover:bg-slate-50' : ''}`}>
                   {isUploading ? (
-                      <div className="w-full space-y-4">
+                      <div
+                          className="w-full space-y-4"
+                          tabIndex={0}
+                          onDragOver={(e) => {
+                              if (!canEdit || !newPlanName || uploadingPlan) return;
+                              e.preventDefault();
+                              setIsDragOverNewPlan(true);
+                          }}
+                          onDragLeave={() => setIsDragOverNewPlan(false)}
+                          onDrop={handleNewPlanDrop}
+                          onPaste={handleNewPlanPaste}
+                      >
                           <h3 className="font-bold text-brand-700">New Floor Plan</h3>
                           <input 
                               className="w-full border rounded p-2 text-sm" 
@@ -242,7 +296,7 @@ export const FloorPlanManager: React.FC<FloorPlanManagerProps> = ({
                           <div className="flex gap-2">
                               <label className={`flex-1 py-2 rounded text-white font-medium text-sm cursor-pointer flex items-center justify-center ${newPlanName && !uploadingPlan ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-300 cursor-not-allowed'}`}>
                                   {uploadingPlan ? <RefreshCw className="animate-spin mr-2"/> : <Upload size={16} className="mr-2"/>}
-                                  {uploadingPlan ? 'Uploading...' : 'Upload/Drag & Drop'}
+                                  {uploadingPlan ? 'Uploading...' : 'Upload / Drag & Drop / Paste'}
                                   <input type="file" className="hidden" accept="image/*" disabled={!newPlanName || uploadingPlan} onChange={handleUpload}/>
                               </label>
                               <label className={`flex-1 py-2 rounded text-white font-medium text-sm cursor-pointer flex items-center justify-center ${newPlanName && !uploadingPlan ? 'bg-brand-600 hover:bg-brand-700' : 'bg-slate-300 cursor-not-allowed'}`}>

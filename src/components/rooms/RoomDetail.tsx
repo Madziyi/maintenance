@@ -298,6 +298,14 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
       await uploadRoomImagesFromFiles(files, null);
   };
 
+  const handleRoomImagesPaste = (e: React.ClipboardEvent) => {
+      if (!isEditing || !canEdit || isUploadingImage) return;
+      e.preventDefault();
+      const files = (Array.from(e.clipboardData.files || []) as File[]).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+      uploadRoomImagesFromFiles(files, null);
+  };
+
   const handleImageDelete = async (imageUrl: string) => {
       await api.deleteImage(imageUrl);
       setForm({...form, roomImages: (form.roomImages || []).filter(img => img !== imageUrl)});
@@ -716,6 +724,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                           {isEditing && canEdit && (
                               <div
                                 className="flex gap-2"
+                                tabIndex={0}
                                 onDragOver={(e) => {
                                   if (!isEditing || !canEdit) return;
                                   e.preventDefault();
@@ -723,6 +732,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                 }}
                                 onDragLeave={() => setIsDragOverImages(false)}
                                 onDrop={handleRoomImagesDrop}
+                                onPaste={handleRoomImagesPaste}
                               >
                                   <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImage ? 'opacity-50 pointer-events-none' : ''} ${isDragOverImages ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                                       {isUploadingImage ? (
@@ -731,7 +741,7 @@ export const RoomDetail: React.FC<RoomDetailProps> = ({
                                           <Upload size={24} className="text-slate-400" />
                                       )}
                                       <span className="text-sm text-slate-500 mt-2">
-                                          {isUploadingImage ? 'Uploading...' : 'Upload/Drag & Drop'}
+                                          {isUploadingImage ? 'Uploading...' : 'Upload / Drag & Drop / Paste'}
                                       </span>
                                       <input 
                                           ref={uploadInputRef}

@@ -139,6 +139,14 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
     await uploadPhotosFromFiles(files, null);
   };
 
+  const handlePhotosPaste = (e: React.ClipboardEvent) => {
+    if (!isEditing || !canEdit || isUploading) return;
+    e.preventDefault();
+    const files = (Array.from(e.clipboardData.files || []) as File[]).filter(f => f.type.startsWith('image/'));
+    if (files.length === 0) return;
+    uploadPhotosFromFiles(files, null);
+  };
+
   const handlePhotoDelete = async (imageUrl: string) => {
     await api.deleteImage(imageUrl);
     setForm({ ...form, images: (form.images || []).filter(img => img !== imageUrl) });
@@ -362,6 +370,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               {isEditing && (
                 <div
                   className="flex gap-2"
+                  tabIndex={0}
                   onDragOver={(e) => {
                     if (!isEditing || !canEdit) return;
                     e.preventDefault();
@@ -369,6 +378,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                   }}
                   onDragLeave={() => setIsDragOverPhotos(false)}
                   onDrop={handlePhotosDrop}
+                  onPaste={handlePhotosPaste}
                 >
                   <label
                     className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center aspect-video cursor-pointer hover:bg-slate-50 transition-colors ${
@@ -383,7 +393,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
                     ) : (
                       <>
                         <Upload size={24} className="text-slate-400" />
-                        <span className="text-sm text-slate-500 mt-2">Upload/Drag & Drop</span>
+                        <span className="text-sm text-slate-500 mt-2">Upload / Drag & Drop / Paste</span>
                       </>
                     )}
                     <input 

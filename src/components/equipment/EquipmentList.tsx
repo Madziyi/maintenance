@@ -536,6 +536,14 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     await uploadNewEquipmentPhotosFromFiles(files, null);
   };
 
+  const handleNewEquipmentPhotosPaste = (e: React.ClipboardEvent) => {
+    if (!canEdit || !isAddingEquipment || isUploadingImages) return;
+    e.preventDefault();
+    const files = (Array.from(e.clipboardData.files || []) as File[]).filter(f => f.type.startsWith('image/'));
+    if (files.length === 0) return;
+    uploadNewEquipmentPhotosFromFiles(files, null);
+  };
+
   const handlePhotoDelete = async (imageUrl: string) => {
     try {
       await api.deleteImage(imageUrl);
@@ -1497,6 +1505,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                 {/* Upload Buttons + drag & drop */}
                 <div
                   className="flex gap-2"
+                  tabIndex={0}
                   onDragOver={(e) => {
                     if (!canEdit || !isAddingEquipment) return;
                     e.preventDefault();
@@ -1504,6 +1513,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                   }}
                   onDragLeave={() => setIsDragOverNewEquipmentPhotos(false)}
                   onDrop={handleNewEquipmentPhotosDrop}
+                  onPaste={handleNewEquipmentPhotosPaste}
                 >
                   <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingImages ? 'opacity-50 pointer-events-none' : ''} ${isDragOverNewEquipmentPhotos ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                     {isUploadingImages ? (
@@ -1514,7 +1524,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
                     ) : (
                       <>
                         <Upload size={24} className="text-slate-400" />
-                        <span className="text-sm text-slate-500 mt-2">Upload/Drag & Drop</span>
+                        <span className="text-sm text-slate-500 mt-2">Upload / Drag & Drop / Paste</span>
                       </>
                     )}
                     <input 

@@ -533,6 +533,14 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
       await uploadEquipmentPhotosFromFiles(files, null);
   };
 
+  const handleEquipmentPhotosPaste = (e: React.ClipboardEvent) => {
+      if (!canEdit || !isAddingEquipment || isUploadingEquipmentImages) return;
+      e.preventDefault();
+      const files = (Array.from(e.clipboardData.files || []) as File[]).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+      uploadEquipmentPhotosFromFiles(files, null);
+  };
+
   const handleEquipmentPhotoDelete = async (imageUrl: string) => {
       try {
           await api.deleteImage(imageUrl);
@@ -911,6 +919,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                               {/* Upload Buttons + drag & drop */}
                               <div
                                 className="flex gap-2"
+                                tabIndex={0}
                                 onDragOver={(e) => {
                                   if (!canEdit || !isAddingEquipment) return;
                                   e.preventDefault();
@@ -918,6 +927,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                 }}
                                 onDragLeave={() => setIsDragOverEquipmentImages(false)}
                                 onDrop={handleEquipmentPhotosDrop}
+                                onPaste={handleEquipmentPhotosPaste}
                               >
                                   <label className={`flex-1 border-2 border-dashed rounded-lg flex flex-col items-center justify-center py-4 cursor-pointer hover:bg-slate-50 transition-colors ${isUploadingEquipmentImages ? 'opacity-50 pointer-events-none' : ''} ${isDragOverEquipmentImages ? 'border-brand-400 bg-brand-50' : 'border-slate-300'}`}>
                                       {isUploadingEquipmentImages ? (
@@ -928,7 +938,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
                                       ) : (
                                           <>
                                               <Upload size={24} className="text-slate-400" />
-                                              <span className="text-sm text-slate-500 mt-2">Upload/Drag & Drop</span>
+                                              <span className="text-sm text-slate-500 mt-2">Upload / Drag & Drop / Paste</span>
                                           </>
                                       )}
                                       <input 
