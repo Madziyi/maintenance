@@ -25,12 +25,14 @@ export const BuildingList: React.FC<BuildingListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   const filtered = useMemo(() => 
-    data.filter(b => fuzzyMatch(
-      b,
-      searchTerm,
-      ['name', 'code'],
-      { threshold: 0.4 } // Balanced: allows ~60% similarity
-    )),
+    data
+      .filter(b => fuzzyMatch(
+        b,
+        searchTerm,
+        ['name', 'code'],
+        { threshold: 0.4 } // Balanced: allows ~60% similarity
+      ))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     [data, searchTerm]
   );
   

@@ -417,14 +417,24 @@ const App = () => {
 
         <div className="p-6 border-t border-slate-800 space-y-3">
             {error && <div className="text-amber-400 flex items-center justify-center text-xs mb-2"><WifiOff size={12} className="mr-1"/> Offline / Preview Mode</div>}
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2 h-9 bg-slate-800 hover:bg-slate-700 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              <LogOut size={16} />
-              <span>Logout</span>
-            </button>
-            <p className="text-slate-400 text-xs text-center">&copy; 2026 WayFinder v1.0</p>
+            {isAuthenticated ? (
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 h-9 bg-slate-800 hover:bg-slate-700 text-white rounded-md transition-colors text-sm font-medium"
+              >
+                <LogOut size={16} />
+                <span>Logout</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 h-9 bg-slate-800 hover:bg-slate-700 text-white rounded-md transition-colors text-sm font-medium"
+              >
+                <LogIn size={16} />
+                <span>Log In</span>
+              </button>   
+            )}
+            <p className="text-slate-500 text-xs text-center">Created by ECC UWindsor Team. For any questions or concerns, contact <a href="mailto:mstanley@uwindsor.ca" className="text-brand-400 hover:text-brand-300 underline">mstanley@uwindsor.ca</a>.</p>
         </div>
       </aside>
       )}
@@ -515,10 +525,17 @@ const App = () => {
                 <MapPin size={18} />
                 <span>Equipment Rooms</span>
               </button>
-              <button onClick={handleLogout} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg flex items-center gap-3">
-                <LogOut size={18} />
-                <span>Logout</span>
-              </button>
+              {isAuthenticated ? (
+                <button onClick={handleLogout} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg flex items-center gap-3">
+                  <LogOut size={18} />
+                  <span>Logout</span>
+                </button>
+              ) : (
+                <button onClick={() => { setIsMobileMenuOpen(false); navigate('/login'); }} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg flex items-center gap-3">
+                  <LogIn size={18} />
+                  <span>Log In</span>
+                </button>
+              )}
                 </div>
             </div>
         )}
@@ -647,6 +664,10 @@ const App = () => {
               />
             } />
           </Routes>
+          <footer className="mt-auto pt-8 pb-4 text-center text-slate-500 text-sm">
+            Created by Stanley Madziyire under the supervision of Curtis Mahoney & Danielle Lenarduzzi. For any questions or concerns, contact{' '}
+            <a href="mailto:mstanley@uwindsor.ca" className="text-brand-600 hover:text-brand-700 underline">mstanley@uwindsor.ca</a>.
+          </footer>
         </div>
       </main>
 
