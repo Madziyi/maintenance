@@ -642,6 +642,7 @@ const App = () => {
               <RoomDetail 
                 data={data}
                 onSaveRoom={saveRoom}
+                onSaveEquipment={saveEquipment}
                 onSetFullScreenImage={handleSetFullScreenImage}
                 onDeleteRoom={deleteRoom}
                 canEdit={isAuthenticated}

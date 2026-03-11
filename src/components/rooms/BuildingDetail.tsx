@@ -572,25 +572,7 @@ export const BuildingDetail: React.FC<BuildingDetailProps> = ({
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-lg border border-slate-200">
               <div className="flex items-center space-x-4">
                   <button 
-                      onClick={() => {
-                        // Prefer real history back (enables browser-like restoration).
-                        const idx = (typeof window !== 'undefined' && (window.history.state?.idx as number | undefined)) ?? 0;
-                        if (idx > 0) {
-                          navigate(-1);
-                          return;
-                        }
-
-                        const state = location.state as { from?: string; fromKey?: string } | null | undefined;
-                        const from = state?.from;
-                        const fromKey = state?.fromKey;
-
-                        if (from) {
-                          navigate(from, { state: fromKey ? { restoreKey: fromKey } : undefined });
-                          return;
-                        }
-
-                        navigate('/building');
-                      }} 
+                      onClick={() => navigate('/building')} 
                       className="p-2 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
                   >
                       <ArrowLeft size={20}/>
