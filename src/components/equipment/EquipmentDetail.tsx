@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2, Share2, Upload } from 'lucide-react';
-import { BuildingData, Equipment, ViewState } from '../../../types';
+import { ArrowLeft, MapPin, Target, Wrench, Camera, Plus, X, Pencil, RefreshCw, Trash2, Share2, Upload, ClipboardList, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BuildingData, Equipment, ViewState, WorkOrder } from '../../../types';
 import { api } from '../../../api';
 import { useToast } from '@/src/components/common/Toast';
 
@@ -26,6 +27,7 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   canEdit,
 }) => {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   if (!equipment) return null;
 
   const exists = data.some(b => b.equipment.some(e => e.id === equipment.id));
@@ -37,6 +39,20 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
   const [isDragOverPhotos, setIsDragOverPhotos] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Work order history for this equipment
+  const [woHistory, setWoHistory] = useState<WorkOrder[]>([]);
+  const [woShowAll, setWoShowAll] = useState(false);
+  const [woLoading, setWoLoading] = useState(false);
+  useEffect(() => {
+    if (!equipment.id) return;
+    setWoLoading(true);
+    setWoShowAll(false);
+    api.getEquipmentWorkOrders(equipment.id)
+      .then(items => setWoHistory(items))
+      .catch(() => {/* silently ignore */})
+      .finally(() => setWoLoading(false));
+  }, [equipment.id]);
 
   useEffect(() => {
     const b = data.find(b => b.code === form.Location);
@@ -330,6 +346,58 @@ export const EquipmentDetail: React.FC<EquipmentDetailProps> = ({
               ) : (
                 <div className="text-slate-700 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg border border-slate-100 min-h-[120px]">
                   {form.notes || 'No notes'}
+                </div>
+              )}
+            </section>
+
+            {/* ── Work Order History ────────────────────────────────── */}
+            <section>
+              <h3 className="flex items-center text-sm font-bold text-slate-900 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">
+                <ClipboardList className="mr-2 text-brand-500" size={16} /> Work Order History
+              </h3>
+              {woLoading ? (
+                <div className="space-y-2">
+                  {[1,2,3].map(i => <div key={i} className="h-8 bg-slate-100 rounded animate-pulse" />)}
+                </div>
+              ) : woHistory.length === 0 ? (
+                <p className="text-slate-400 text-sm italic">No work orders found for this equipment.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {(woShowAll ? woHistory : woHistory.slice(0, 5)).map(wo => (
+                    <button
+                      key={wo.id}
+                      onClick={() => navigate(`/work-orders/${wo.id}`)}
+                      className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg border border-slate-100 hover:border-brand-200 hover:bg-brand-50 transition-colors group"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-xs text-slate-500 shrink-0">#{wo.workOrderNumber}</span>
+                        <span className="text-xs text-slate-700 truncate">{wo.requestDescription?.slice(0, 60) || '—'}</span>
+                      </span>
+                      <span className="flex items-center gap-2 shrink-0 ml-2">
+                        {wo.openDate && <span className="text-xs text-slate-400">{wo.openDate}</span>}
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${wo.status === 'CLOSE' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {wo.status ?? '—'}
+                        </span>
+                        <ExternalLink size={12} className="text-slate-300 group-hover:text-brand-400 transition-colors" />
+                      </span>
+                    </button>
+                  ))}
+                  {woHistory.length > 5 && !woShowAll && (
+                    <button
+                      onClick={() => setWoShowAll(true)}
+                      className="text-xs text-brand-600 hover:text-brand-800 font-medium mt-1 block"
+                    >
+                      Show all {woHistory.length} work orders ↓
+                    </button>
+                  )}
+                  {woShowAll && woHistory.length > 5 && (
+                    <button
+                      onClick={() => setWoShowAll(false)}
+                      className="text-xs text-slate-400 hover:text-slate-600 font-medium mt-1 block"
+                    >
+                      Show less ↑
+                    </button>
+                  )}
                 </div>
               )}
             </section>

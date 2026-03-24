@@ -31,6 +31,133 @@ function isoNow() {
 
 let equipmentReviewSchemaEnsured = false;
 let equipmentChangeLogSchemaEnsured = false;
+let workOrderSchemaEnsured = false;
+
+async function ensureWorkOrderSchema(db) {
+  if (workOrderSchemaEnsured) return;
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS Staff (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        employeeNumber TEXT,
+        craft TEXT,
+        active INTEGER DEFAULT 1,
+        createdAt TEXT NOT NULL
+      )
+    `).run();
+
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS WorkOrders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workOrderNumber TEXT NOT NULL,
+        buildingCode TEXT,
+        buildingName TEXT,
+        roomNumber TEXT,
+        equipmentId TEXT,
+        equipmentRaw TEXT,
+        requester TEXT,
+        requestDescription TEXT,
+        status TEXT,
+        priority TEXT,
+        craft TEXT,
+        openDate TEXT,
+        completeDate TEXT,
+        actualHours REAL DEFAULT 0,
+        actualLabourCost REAL DEFAULT 0,
+        actualTotalCost REAL DEFAULT 0,
+        technicianNotes TEXT,
+        completionRemark TEXT,
+        pdfUrl TEXT,
+        pageNumber INTEGER DEFAULT 1,
+        pageCount INTEGER DEFAULT 1,
+        source TEXT DEFAULT 'pdf',
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    `).run();
+
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS WorkOrderTechnicians (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workOrderId INTEGER NOT NULL,
+        employeeNumber TEXT,
+        staffId INTEGER,
+        craft TEXT,
+        hours REAL,
+        rate REAL,
+        totalCost REAL
+      )
+    `).run();
+
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS WorkOrderAnnotations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workOrderId INTEGER NOT NULL,
+        staffId INTEGER,
+        authorName TEXT NOT NULL,
+        text TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      )
+    `).run();
+
+    // Add pageCount column to existing databases that predate this field
+    try {
+      await db.prepare("ALTER TABLE WorkOrders ADD COLUMN pageCount INTEGER DEFAULT 1").run();
+    } catch (_) { /* column already exists — ignore */ }
+
+    // Mechanic completion fields
+    const completionCols = [
+      ["completedAt",          "TEXT"],
+      ["completionHours",      "REAL"],
+      ["completedByStaffIds",  "TEXT"],
+      ["completedByNames",     "TEXT"],
+      ["rawTranscript",        "TEXT"],
+      ["assignedToStaffId",    "INTEGER"],
+      ["assignedToName",       "TEXT"],
+      ["completionImageUrl",   "TEXT"],
+      ["handoffPending",       "INTEGER DEFAULT 0"],
+    ];
+    for (const [name, type] of completionCols) {
+      try {
+        await db.prepare(`ALTER TABLE WorkOrders ADD COLUMN ${name} ${type}`).run();
+      } catch (_) { /* already exists */ }
+    }
+
+    // Staff category (Operators / Maintenance / Assistants / Refrigeration)
+    try {
+      await db.prepare("ALTER TABLE Staff ADD COLUMN category TEXT").run();
+    } catch (_) { /* already exists */ }
+
+    // Handoff tracking table
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS WorkOrderHandoffs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workOrderId INTEGER NOT NULL,
+        fromStaffId INTEGER,
+        fromStaffName TEXT,
+        reason TEXT,
+        handoffNote TEXT,
+        resolved INTEGER DEFAULT 0,
+        resolvedByStaffId INTEGER,
+        resolvedToStaffId INTEGER,
+        resolvedToStaffName TEXT,
+        createdAt TEXT NOT NULL,
+        resolvedAt TEXT
+      )
+    `).run();
+
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_buildingCode ON WorkOrders(buildingCode)").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_equipmentId ON WorkOrders(equipmentId)").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_status ON WorkOrders(status)").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_openDate ON WorkOrders(openDate)").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_woa_workOrderId ON WorkOrderAnnotations(workOrderId)").run();
+  } catch (e) {
+    console.warn("ensureWorkOrderSchema failed:", e?.message || String(e));
+  } finally {
+    workOrderSchemaEnsured = true;
+  }
+}
 
 async function ensureEquipmentReviewSchema(db) {
   if (equipmentReviewSchemaEnsured) return;
@@ -168,6 +295,45 @@ async function insertEquipmentChangeLogs(db, entries) {
   }
 }
 
+function mapWorkOrderRow(row) {
+  return {
+    id: String(row.id),
+    workOrderNumber: row.workOrderNumber || '',
+    buildingCode: row.buildingCode || null,
+    buildingName: row.buildingName || null,
+    roomNumber: row.roomNumber || null,
+    equipmentId: row.equipmentId || null,
+    equipmentRaw: row.equipmentRaw || null,
+    requester: row.requester || null,
+    requestDescription: row.requestDescription || null,
+    status: row.status || null,
+    priority: row.priority || null,
+    craft: row.craft || null,
+    openDate: row.openDate || null,
+    completeDate: row.completeDate || null,
+    actualHours: row.actualHours ?? 0,
+    actualLabourCost: row.actualLabourCost ?? 0,
+    actualTotalCost: row.actualTotalCost ?? 0,
+    technicianNotes: row.technicianNotes || null,
+    completionRemark: row.completionRemark || null,
+    pdfUrl: row.pdfUrl || null,
+    pageNumber: row.pageNumber ?? 1,
+    pageCount: row.pageCount ?? 1,
+    source: row.source || 'pdf',
+    completedAt: row.completedAt || null,
+    completionHours: row.completionHours ?? null,
+    completedByStaffIds: row.completedByStaffIds ? JSON.parse(row.completedByStaffIds) : null,
+    completedByNames: row.completedByNames || null,
+    rawTranscript: row.rawTranscript || null,
+    assignedToStaffId: row.assignedToStaffId ? String(row.assignedToStaffId) : null,
+    assignedToName: row.assignedToName || null,
+    completionImageUrl: row.completionImageUrl || null,
+    handoffPending: row.handoffPending === 1,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -177,8 +343,21 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Old-Image-Url, X-File-Name, X-File-Extension',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Old-Image-Url, X-File-Name, X-File-Extension',
     };
+
+    // Validate write requests against WRITE_SECRET.
+    // Returns a 401 Response if auth fails, or null if the request is allowed.
+    function validateWrite(req) {
+      const secret = env.WRITE_SECRET;
+      if (!secret) return null; // no secret configured — allow (backward compat)
+      const auth = req.headers.get('Authorization') || '';
+      if (auth === `Bearer ${secret}`) return null;
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -195,6 +374,7 @@ export default {
       if (env.DB) {
         await ensureEquipmentReviewSchema(env.DB);
         await ensureEquipmentChangeLogSchema(env.DB);
+        await ensureWorkOrderSchema(env.DB);
       }
 
       // --- GET AGGREGATED DATA ---
@@ -468,6 +648,7 @@ export default {
 
       // --- CREATE/UPDATE BUILDING ---
       if (url.pathname === '/api/buildings' && method === 'POST') {
+          const authError = validateWrite(request); if (authError) return authError;
           const b = await request.json();
           // Ensure code is present (required field)
           const code = (b.code !== undefined && b.code !== null) ? String(b.code) : null;
@@ -535,6 +716,7 @@ export default {
 
       // --- CREATE/UPDATE EQUIPMENT ---
       if (url.pathname === '/api/equipment' && method === 'POST') {
+          const authError = validateWrite(request); if (authError) return authError;
           const e = await request.json();
           const imagesJson = JSON.stringify(e.images || []);
           const newEquipmentFlag =
@@ -748,6 +930,7 @@ export default {
 
       // --- EQUIPMENT REVIEW: BULK UPDATE (spreadsheet save) ---
       if (url.pathname === '/api/equipment-review/bulk-update' && method === 'POST') {
+          const authError = validateWrite(request); if (authError) return authError;
           if (!env.DB) throw new Error("DB binding not found on env");
           const body = await request.json();
           const updates = Array.isArray(body?.updates) ? body.updates : null;
@@ -834,6 +1017,7 @@ export default {
 
       // --- EQUIPMENT REVIEW: APPROVE (mark reviewed) ---
       if (url.pathname === '/api/equipment-review/approve' && method === 'POST') {
+          const authError = validateWrite(request); if (authError) return authError;
           if (!env.DB) throw new Error("DB binding not found on env");
           const body = await request.json();
           const now = isoNow();
@@ -856,6 +1040,7 @@ export default {
 
       // --- CREATE/UPDATE ROOM ---
       if (url.pathname === '/api/rooms' && method === 'POST') {
+          const authError = validateWrite(request); if (authError) return authError;
           const r = await request.json();
           const isNew = isNaN(Number(r.id));
 
@@ -915,6 +1100,7 @@ export default {
 
       // --- CREATE/UPDATE FLOOR PLAN ---
       if (url.pathname === '/api/floorplans' && method === 'POST') {
+          const authError = validateWrite(request); if (authError) return authError;
           const { buildingCode, plan } = await request.json();
           
           // Check if plan has an ID (updating existing) or not (creating new)
@@ -955,6 +1141,7 @@ export default {
 
       // --- DELETE EQUIPMENT ---
       if (url.pathname.startsWith('/api/equipment/') && method === 'DELETE') {
+          const authError = validateWrite(request); if (authError) return authError;
           const id = url.pathname.split('/').pop();
           
           // Get equipment first to delete associated images
@@ -989,6 +1176,7 @@ export default {
 
       // --- DELETE ROOM ---
       if (url.pathname.startsWith('/api/rooms/') && method === 'DELETE') {
+          const authError = validateWrite(request); if (authError) return authError;
           const id = url.pathname.split('/').pop();
           
           // Get room first to delete associated images
@@ -1023,6 +1211,7 @@ export default {
 
       // --- DELETE FLOOR PLAN ---
       if (url.pathname.startsWith('/api/floorplans/') && method === 'DELETE') {
+          const authError = validateWrite(request); if (authError) return authError;
           const id = url.pathname.split('/').pop();
           await env.DB.prepare('DELETE FROM FloorPlans WHERE id = ?').bind(id).run();
           return Response.json({ success: true }, { headers: corsHeaders });
@@ -1030,6 +1219,7 @@ export default {
 
       // --- DELETE IMAGE FROM R2 ---
       if (url.pathname === '/api/delete-image' && method === 'POST') {
+          const authError = validateWrite(request); if (authError) return authError;
           if (!env.BUCKET) throw new Error("BUCKET binding missing");
           const { imageUrl } = await request.json();
           
@@ -1055,6 +1245,7 @@ export default {
 
       // --- UPLOAD TO R2 ---
       if (url.pathname === '/api/upload' && method === 'PUT') {
+          const authError = validateWrite(request); if (authError) return authError;
           if (!env.BUCKET) throw new Error("BUCKET binding missing");
           
           // Check if we need to delete an old image
@@ -1104,6 +1295,835 @@ export default {
           const key = crypto.randomUUID() + extension;
           await env.BUCKET.put(key, request.body);
           return Response.json({ url: `${R2_PUBLIC_URL}/${key}` }, { headers: corsHeaders });
+      }
+
+      // =====================================================================
+      // STAFF ENDPOINTS
+      // =====================================================================
+
+      // --- GET STAFF LIST ---
+      if (url.pathname === '/api/staff' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const res = await env.DB.prepare(
+          "SELECT * FROM Staff WHERE active = 1 ORDER BY name ASC"
+        ).all();
+        const staff = (res?.results || []).map(r => ({
+          id: String(r.id),
+          name: r.name,
+          employeeNumber: r.employeeNumber || null,
+          craft: r.craft || null,
+          category: r.category || null,
+          active: r.active === 1,
+          createdAt: r.createdAt,
+        }));
+        return Response.json(staff, { headers: corsHeaders });
+      }
+
+      // --- CREATE STAFF ---
+      if (url.pathname === '/api/staff' && method === 'POST') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const body = await request.json();
+        const name = body.name ? String(body.name).trim() : null;
+        if (!name) return Response.json({ error: 'name is required' }, { status: 400, headers: corsHeaders });
+        const now = isoNow();
+        const row = await env.DB.prepare(
+          "INSERT INTO Staff (name, employeeNumber, craft, category, active, createdAt) VALUES (?, ?, ?, ?, 1, ?) RETURNING *"
+        ).bind(name, body.employeeNumber || null, body.craft || null, body.category || null, now).first();
+        return Response.json({
+          id: String(row.id), name: row.name, employeeNumber: row.employeeNumber || null,
+          craft: row.craft || null, category: row.category || null, active: true, createdAt: row.createdAt,
+        }, { headers: corsHeaders });
+      }
+
+      // --- UPDATE STAFF ---
+      if (url.pathname.startsWith('/api/staff/') && method === 'PUT') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const id = url.pathname.split('/').pop();
+        const body = await request.json();
+        const now = isoNow();
+        const existing = await env.DB.prepare("SELECT * FROM Staff WHERE id = ?").bind(id).first();
+        if (!existing) return Response.json({ error: 'Staff not found' }, { status: 404, headers: corsHeaders });
+        const name = body.name !== undefined ? String(body.name).trim() : existing.name;
+        const employeeNumber = body.employeeNumber !== undefined ? body.employeeNumber : existing.employeeNumber;
+        const craft = body.craft !== undefined ? body.craft : existing.craft;
+        const category = body.category !== undefined ? body.category : existing.category;
+        const active = body.active !== undefined ? (body.active ? 1 : 0) : existing.active;
+        const row = await env.DB.prepare(
+          "UPDATE Staff SET name=?, employeeNumber=?, craft=?, category=?, active=? WHERE id=? RETURNING *"
+        ).bind(name, employeeNumber, craft, category, active, id).first();
+        return Response.json({
+          id: String(row.id), name: row.name, employeeNumber: row.employeeNumber || null,
+          craft: row.craft || null, category: row.category || null, active: row.active === 1, createdAt: row.createdAt,
+        }, { headers: corsHeaders });
+      }
+
+      // --- DELETE STAFF ---
+      if (url.pathname.startsWith('/api/staff/') && method === 'DELETE') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const id = url.pathname.split('/').pop();
+        await env.DB.prepare("DELETE FROM Staff WHERE id = ?").bind(id).run();
+        return Response.json({ success: true }, { headers: corsHeaders });
+      }
+
+      // =====================================================================
+      // HANDOFF ENDPOINTS
+      // =====================================================================
+
+      // --- LIST PENDING HANDOFFS (manager view) ---
+      if (url.pathname === '/api/work-orders/handoffs' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const rows = await env.DB.prepare(`
+          SELECT h.*, w.workOrderNumber, w.requestDescription, w.buildingCode, w.roomNumber, w.assignedToName, w.assignedToStaffId
+          FROM WorkOrderHandoffs h
+          JOIN WorkOrders w ON w.id = h.workOrderId
+          WHERE h.resolved = 0
+          ORDER BY h.createdAt DESC
+        `).all();
+        return Response.json((rows.results || []).map(r => ({
+          id: String(r.id),
+          workOrderId: String(r.workOrderId),
+          workOrderNumber: r.workOrderNumber,
+          requestDescription: r.requestDescription,
+          buildingCode: r.buildingCode,
+          roomNumber: r.roomNumber,
+          currentAssigneeName: r.assignedToName,
+          currentAssigneeId: r.assignedToStaffId ? String(r.assignedToStaffId) : null,
+          fromStaffId: r.fromStaffId ? String(r.fromStaffId) : null,
+          fromStaffName: r.fromStaffName,
+          reason: r.reason,
+          handoffNote: r.handoffNote,
+          createdAt: r.createdAt,
+        })), { headers: corsHeaders });
+      }
+
+      // --- CREATE HANDOFF (pass on) ---
+      if (url.pathname.match(/^\/api\/work-orders\/\d+\/pass-on$/) && method === 'POST') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const woId = url.pathname.split('/')[3];
+        const body = await request.json();
+        const now = isoNow();
+
+        // Create handoff record
+        await env.DB.prepare(`
+          INSERT INTO WorkOrderHandoffs (workOrderId, fromStaffId, fromStaffName, reason, handoffNote, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(
+          woId,
+          body.fromStaffId || null,
+          body.fromStaffName || null,
+          body.reason || 'end_of_day',
+          body.handoffNote || null,
+          now
+        ).run();
+
+        // Mark WO as having a pending handoff
+        await env.DB.prepare(
+          "UPDATE WorkOrders SET handoffPending = 1, updatedAt = ? WHERE id = ?"
+        ).bind(now, woId).run();
+
+        // Post annotation if note provided
+        if (body.handoffNote) {
+          await env.DB.prepare(`
+            INSERT INTO WorkOrderAnnotations (workOrderId, text, authorName, createdAt)
+            VALUES (?, ?, ?, ?)
+          `).bind(woId, `[Handoff] ${body.handoffNote}`, body.fromStaffName || 'Staff', now).run();
+        }
+
+        const updated = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(woId).first();
+        return Response.json(mapWorkOrderRow(updated), { headers: corsHeaders });
+      }
+
+      // --- RESOLVE HANDOFF (manager reassigns) ---
+      if (url.pathname.match(/^\/api\/work-orders\/handoffs\/\d+\/resolve$/) && method === 'POST') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const handoffId = url.pathname.split('/')[4];
+        const body = await request.json();
+        const now = isoNow();
+
+        const handoff = await env.DB.prepare("SELECT * FROM WorkOrderHandoffs WHERE id = ?").bind(handoffId).first();
+        if (!handoff) return Response.json({ error: 'Handoff not found' }, { status: 404, headers: corsHeaders });
+
+        // Mark handoff resolved
+        await env.DB.prepare(`
+          UPDATE WorkOrderHandoffs SET resolved = 1, resolvedAt = ?, resolvedToStaffId = ?, resolvedToStaffName = ?
+          WHERE id = ?
+        `).bind(now, body.toStaffId || null, body.toStaffName || null, handoffId).run();
+
+        // Reassign WO + clear pending flag
+        await env.DB.prepare(`
+          UPDATE WorkOrders SET assignedToStaffId = ?, assignedToName = ?, handoffPending = 0, updatedAt = ?
+          WHERE id = ?
+        `).bind(body.toStaffId || null, body.toStaffName || null, now, handoff.workOrderId).run();
+
+        const updated = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(handoff.workOrderId).first();
+        return Response.json(mapWorkOrderRow(updated), { headers: corsHeaders });
+      }
+
+      // =====================================================================
+      // WORK ORDER ENDPOINTS
+      // =====================================================================
+
+      // --- LIST WORK ORDERS (with search) ---
+      // --- WORK ORDER SUGGESTIONS (autocomplete) ---
+      if (url.pathname === '/api/work-orders/suggestions' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const [woRows, descRows, eqRows, bldRows] = await Promise.all([
+          env.DB.prepare('SELECT DISTINCT workOrderNumber FROM WorkOrders WHERE workOrderNumber IS NOT NULL ORDER BY workOrderNumber LIMIT 500').all(),
+          env.DB.prepare('SELECT DISTINCT requestDescription FROM WorkOrders WHERE requestDescription IS NOT NULL LIMIT 300').all(),
+          env.DB.prepare('SELECT DISTINCT equipmentRaw FROM WorkOrders WHERE equipmentRaw IS NOT NULL ORDER BY equipmentRaw LIMIT 300').all(),
+          env.DB.prepare('SELECT DISTINCT buildingCode FROM WorkOrders WHERE buildingCode IS NOT NULL ORDER BY buildingCode').all(),
+        ]);
+        return Response.json({
+          woNumbers:    (woRows.results    || []).map(r => r.workOrderNumber),
+          descriptions: (descRows.results  || []).map(r => r.requestDescription),
+          equipment:    (eqRows.results    || []).map(r => r.equipmentRaw),
+          buildings:    (bldRows.results   || []).map(r => r.buildingCode),
+        }, { headers: corsHeaders });
+      }
+
+      if (url.pathname === '/api/work-orders/insights' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const year = url.searchParams.get('year') || String(new Date().getFullYear());
+        const buildingYear = url.searchParams.get('buildingYear') || null; // null = all time
+
+        const bldYearWhere = buildingYear
+          ? 'AND strftime(\'%Y\', openDate) = ?'
+          : '';
+
+        const [kpiRow, monthlyRows, buildingRows, equipRows, craftRows] = await Promise.all([
+          env.DB.prepare(`
+            SELECT
+              COALESCE(SUM(actualTotalCost), 0) as totalAllTime,
+              COALESCE(SUM(CASE WHEN strftime('%Y', openDate) = ? THEN actualTotalCost ELSE 0 END), 0) as totalThisYear,
+              COUNT(*) as totalWOs,
+              SUM(CASE WHEN status NOT IN ('CLOSE','CANC') THEN 1 ELSE 0 END) as openWOCount,
+              COALESCE(AVG(CASE WHEN actualTotalCost > 0 THEN actualTotalCost ELSE NULL END), 0) as avgCostPerWO
+            FROM WorkOrders
+          `).bind(year).first(),
+
+          env.DB.prepare(`
+            SELECT strftime('%m', openDate) as month,
+              COALESCE(SUM(actualTotalCost), 0) as totalCost,
+              COALESCE(SUM(actualLabourCost), 0) as labourCost,
+              COUNT(*) as woCount
+            FROM WorkOrders
+            WHERE strftime('%Y', openDate) = ? AND openDate IS NOT NULL
+            GROUP BY month ORDER BY month
+          `).bind(year).all(),
+
+          buildingYear
+            ? env.DB.prepare(`
+                SELECT buildingCode, MAX(buildingName) as buildingName,
+                  COALESCE(SUM(actualTotalCost), 0) as totalCost,
+                  COALESCE(SUM(actualLabourCost), 0) as labourCost,
+                  COUNT(*) as woCount,
+                  COALESCE(AVG(CASE WHEN actualTotalCost > 0 THEN actualTotalCost ELSE NULL END), 0) as avgCost
+                FROM WorkOrders
+                WHERE buildingCode IS NOT NULL AND actualTotalCost > 0 ${bldYearWhere}
+                GROUP BY buildingCode ORDER BY totalCost DESC LIMIT 25
+              `).bind(buildingYear).all()
+            : env.DB.prepare(`
+                SELECT buildingCode, MAX(buildingName) as buildingName,
+                  COALESCE(SUM(actualTotalCost), 0) as totalCost,
+                  COALESCE(SUM(actualLabourCost), 0) as labourCost,
+                  COUNT(*) as woCount,
+                  COALESCE(AVG(CASE WHEN actualTotalCost > 0 THEN actualTotalCost ELSE NULL END), 0) as avgCost
+                FROM WorkOrders
+                WHERE buildingCode IS NOT NULL AND actualTotalCost > 0
+                GROUP BY buildingCode ORDER BY totalCost DESC LIMIT 25
+              `).all(),
+
+          env.DB.prepare(`
+            SELECT equipmentRaw, MAX(buildingCode) as buildingCode,
+              COALESCE(SUM(actualTotalCost), 0) as totalCost,
+              COALESCE(SUM(actualLabourCost), 0) as labourCost,
+              COUNT(*) as woCount,
+              COALESCE(AVG(CASE WHEN actualTotalCost > 0 THEN actualTotalCost ELSE NULL END), 0) as avgCost
+            FROM WorkOrders
+            WHERE equipmentRaw IS NOT NULL
+            GROUP BY equipmentRaw ORDER BY woCount DESC, totalCost DESC
+          `).all(),
+
+          env.DB.prepare(`
+            SELECT craft,
+              COALESCE(SUM(actualTotalCost), 0) as totalCost,
+              COUNT(*) as woCount
+            FROM WorkOrders
+            WHERE craft IS NOT NULL AND craft != '' AND actualTotalCost > 0
+            GROUP BY craft ORDER BY totalCost DESC
+          `).all(),
+        ]);
+
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const monthlyMap = new Map((monthlyRows.results || []).map(r => [r.month, r]));
+        const monthly = MONTHS.map((name, i) => {
+          const key = String(i + 1).padStart(2, '0');
+          const r = monthlyMap.get(key) || { totalCost: 0, labourCost: 0, woCount: 0 };
+          return {
+            month: name,
+            totalCost: Number(r.totalCost),
+            labourCost: Number(r.labourCost),
+            otherCost: Math.max(0, Number(r.totalCost) - Number(r.labourCost)),
+            woCount: Number(r.woCount),
+          };
+        });
+
+        return Response.json({
+          kpis: {
+            totalAllTime: Number(kpiRow?.totalAllTime || 0),
+            totalThisYear: Number(kpiRow?.totalThisYear || 0),
+            totalWOs: Number(kpiRow?.totalWOs || 0),
+            openWOCount: Number(kpiRow?.openWOCount || 0),
+            avgCostPerWO: Number(kpiRow?.avgCostPerWO || 0),
+          },
+          monthly,
+          buildings: (buildingRows.results || []).map(r => ({
+            buildingCode: r.buildingCode,
+            buildingName: r.buildingName || r.buildingCode,
+            totalCost: Number(r.totalCost),
+            labourCost: Number(r.labourCost),
+            woCount: Number(r.woCount),
+            avgCost: Number(r.avgCost),
+          })),
+          equipment: (equipRows.results || []).map(r => ({
+            equipmentRaw: r.equipmentRaw,
+            buildingCode: r.buildingCode,
+            totalCost: Number(r.totalCost),
+            labourCost: Number(r.labourCost),
+            woCount: Number(r.woCount),
+            avgCost: Number(r.avgCost),
+          })),
+          crafts: (craftRows.results || []).map(r => ({
+            craft: r.craft,
+            totalCost: Number(r.totalCost),
+            woCount: Number(r.woCount),
+          })),
+        }, { headers: corsHeaders });
+      }
+
+      if (url.pathname === '/api/work-orders' && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const q        = url.searchParams.get('q') || '';
+        const woNumber = url.searchParams.get('woNumber') || '';
+        const desc     = url.searchParams.get('description') || '';
+        const equip    = url.searchParams.get('equipment') || '';
+        const building    = url.searchParams.get('building') || '';
+        const status      = url.searchParams.get('status') || '';
+        const from        = url.searchParams.get('from') || '';
+        const to          = url.searchParams.get('to') || '';
+        const assignedTo  = url.searchParams.get('assignedTo') || '';
+        const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
+        const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+        const ALLOWED_SORT = ['openDate', 'createdAt', 'workOrderNumber', 'status', 'completeDate', 'actualTotalCost', 'actualLabourCost'];
+        const sortByRaw = url.searchParams.get('sortBy') || 'openDate';
+        const sortDirRaw = url.searchParams.get('sortDir') || 'desc';
+        const orderCol = ALLOWED_SORT.includes(sortByRaw) ? sortByRaw : 'openDate';
+        const orderDir = sortDirRaw === 'asc' ? 'ASC' : 'DESC';
+
+        let where = '1=1';
+        const params = [];
+        if (q) {
+          where += ' AND (workOrderNumber LIKE ? OR equipmentRaw LIKE ? OR requestDescription LIKE ? OR buildingName LIKE ?)';
+          const like = `%${q}%`;
+          params.push(like, like, like, like);
+        }
+        if (woNumber) { where += ' AND workOrderNumber LIKE ?';      params.push(`%${woNumber}%`); }
+        if (desc)     { where += ' AND requestDescription LIKE ?';   params.push(`%${desc}%`); }
+        if (equip)    { where += ' AND equipmentRaw LIKE ?';         params.push(`%${equip}%`); }
+        if (building)   { where += ' AND buildingCode = ?';         params.push(building); }
+        if (status)     { where += ' AND status = ?';              params.push(status); }
+        if (from)       { where += ' AND openDate >= ?';           params.push(from); }
+        if (to)         { where += ' AND openDate <= ?';           params.push(to); }
+        if (assignedTo) { where += ' AND assignedToStaffId = ?';   params.push(assignedTo); }
+
+        const countRow = await env.DB.prepare(
+          `SELECT COUNT(*) as total FROM WorkOrders WHERE ${where}`
+        ).bind(...params).first();
+        const total = countRow?.total || 0;
+
+        const rows = await env.DB.prepare(
+          `SELECT * FROM WorkOrders WHERE ${where} ORDER BY ${orderCol} ${orderDir} LIMIT ? OFFSET ?`
+        ).bind(...params, limit, offset).all();
+
+        const items = (rows?.results || []).map(mapWorkOrderRow);
+        return Response.json({ items, total }, { headers: corsHeaders });
+      }
+
+      // --- WORK ORDERS FOR EQUIPMENT ---
+      if (url.pathname.startsWith('/api/work-orders/equipment/') && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const equipmentId = decodeURIComponent(url.pathname.split('/api/work-orders/equipment/')[1] || '');
+        const rows = await env.DB.prepare(
+          `SELECT * FROM WorkOrders WHERE equipmentId = ? OR equipmentRaw LIKE ? ORDER BY openDate DESC LIMIT 50`
+        ).bind(equipmentId, `${equipmentId}%`).all();
+        const items = (rows?.results || []).map(mapWorkOrderRow);
+        return Response.json({ items }, { headers: corsHeaders });
+      }
+
+      // --- GET WORK ORDER DETAIL ---
+      // --- CLEAN TRANSCRIPT VIA GEMINI ---
+      if (url.pathname === '/api/work-orders/clean-transcript' && method === 'POST') {
+        const body = await request.json();
+        const rawTranscript = (body.rawTranscript || '').trim();
+        if (!rawTranscript) {
+          return Response.json({ error: 'rawTranscript is required' }, { status: 400, headers: corsHeaders });
+        }
+        if (!env.GEMINI_API_KEY) {
+          return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 503, headers: corsHeaders });
+        }
+
+        const prompt = `You are a facility maintenance transcription assistant at a university. A technician dictated their work notes via voice recognition. Clean up the raw transcript into professional, readable text.
+
+CRITICAL — always correct these HVAC/building systems abbreviations when speech recognition mishears them:
+- "age you" / "AJ" / "AEHU" / "a-h-u" → AHU (Air Handling Unit)
+- "are two you" / "R2U" / "our two you" → RTU (Roof Top Unit)
+- "vav" / "V-A-V" / "vague" → VAV (Variable Air Volume)
+- "fcu" / "F-C-U" / "few" → FCU (Fan Coil Unit)
+- "bas" / "B-A-S" / "baz" → BAS (Building Automation System)
+- "bms" / "B-M-S" → BMS (Building Management System)
+- "vfd" / "V-F-D" → VFD (Variable Frequency Drive)
+- "ddc" / "D-D-C" → DDC (Direct Digital Control)
+- "mae you" / "MAU" → MAU (Makeup Air Unit)
+- "hru" / "H-R-U" → HRU (Heat Recovery Unit)
+- "chiller" stays as chiller, "cooling tower" stays, "boiler" stays
+- "psi" / "P-S-I" → PSI, "gpm" → GPM, "cfm" → CFM
+- Building codes like "LAM", "OPS", "ERB", "CEI", "AHF", etc. should be uppercase
+
+Raw voice transcript: """${rawTranscript}"""
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{
+  "cleaned": "corrected transcript with proper grammar, punctuation, capitalization, and all technical abbreviations fixed",
+  "summary": "1-2 sentence summary of the key work performed"
+}`;
+
+        const geminiResp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${env.GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.1 },
+            }),
+          }
+        );
+
+        if (!geminiResp.ok) {
+          const errText = await geminiResp.text();
+          return Response.json({ error: `Gemini API error: ${errText}` }, { status: 502, headers: corsHeaders });
+        }
+
+        const geminiData = await geminiResp.json();
+        const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+        try {
+          const parsed = JSON.parse(rawText);
+          return Response.json({ cleaned: parsed.cleaned || rawTranscript, summary: parsed.summary || '' }, { headers: corsHeaders });
+        } catch {
+          // Gemini returned non-JSON — return raw text as cleaned, no summary
+          return Response.json({ cleaned: rawText || rawTranscript, summary: '' }, { headers: corsHeaders });
+        }
+      }
+
+      // --- EXTRACT COMPLETION FROM PHOTO (Gemini Vision) ---
+      if (url.pathname === '/api/work-orders/extract-completion-image' && method === 'POST') {
+        if (!env.GEMINI_API_KEY) {
+          return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 503, headers: corsHeaders });
+        }
+        const body = await request.json();
+        const { imageBase64, mimeType = 'image/jpeg', staffNames = [] } = body;
+        if (!imageBase64) {
+          return Response.json({ error: 'imageBase64 required' }, { status: 400, headers: corsHeaders });
+        }
+
+        const staffList = staffNames.length
+          ? `\nKnown staff names for matching: ${staffNames.join(', ')}`
+          : '';
+
+        const prompt = `You are extracting data from a University of Windsor work order form photo.
+
+The form has printed fields and handwritten fields. Extract the following:
+
+1. woNumber — the printed WO/RO number (top right area). Return digits only, no "RO" prefix.
+2. completionDate — handwritten "Comp Date:" field. Return as YYYY-MM-DD.
+3. hours — handwritten "Hours:" field. Return as a number.
+4. completedBy — handwritten "By:" field. Return as array of names exactly as written.
+5. completionRemark — combine the handwritten "Completion Remark:" box AND any handwritten notes at the bottom of the form (under TransDate/Note section). Return as a single cleaned-up string.
+6. confidence — "high" if all fields are clearly readable, "medium" if some ambiguity, "low" if significant issues.${staffList}
+
+If a field is not present or illegible, return null for that field.
+Return ONLY valid JSON, no markdown:
+{"woNumber":"string","completionDate":"YYYY-MM-DD or null","hours":number_or_null,"completedBy":[],"completionRemark":"string or null","confidence":"high|medium|low"}`;
+
+        const geminiResp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: prompt },
+                  { inlineData: { mimeType, data: imageBase64 } },
+                ],
+              }],
+              generationConfig: { temperature: 0.1 },
+            }),
+          }
+        );
+
+        if (!geminiResp.ok) {
+          const errText = await geminiResp.text();
+          return Response.json({ error: `Gemini error: ${errText}` }, { status: 502, headers: corsHeaders });
+        }
+
+        const geminiData = await geminiResp.json();
+        const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim()
+          .replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+
+        try {
+          const parsed = JSON.parse(rawText);
+          return Response.json({
+            woNumber: parsed.woNumber || null,
+            completionDate: parsed.completionDate || null,
+            hours: parsed.hours ?? null,
+            completedBy: Array.isArray(parsed.completedBy) ? parsed.completedBy : [],
+            completionRemark: parsed.completionRemark || null,
+            confidence: parsed.confidence || 'medium',
+          }, { headers: corsHeaders });
+        } catch {
+          return Response.json({ error: 'Could not parse Gemini response', raw: rawText }, { status: 502, headers: corsHeaders });
+        }
+      }
+
+      // --- COMPLETION CHAT (conversational AI for voice completion) ---
+      if (url.pathname === '/api/work-orders/completion-chat' && method === 'POST') {
+        const body = await request.json();
+        if (!env.GEMINI_API_KEY) {
+          return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 503, headers: corsHeaders });
+        }
+        const { messages = [], extracted = {}, woContext = {}, staffNames = [], todayDate } = body;
+
+        const today = todayDate || new Date().toISOString().slice(0, 10);
+        const systemInstruction = `You are a voice assistant logging a work order completion. Replies must be one short sentence.
+
+WO #${woContext.woNumber || '?'}: ${woContext.description || ''}
+Today: ${today}
+
+REQUIRED fields (collect all 3):
+1. completionDate — ALWAYS default to today (${today}) unless they say a different date. Never ask for date if not mentioned.
+2. hours — how long it took (number, decimals ok)
+3. completionRemark — what was found and done, cleaned up from their words
+
+OPTIONAL:
+- collaborators — other people who helped (empty array if not mentioned, NEVER ask for this)
+
+STRICT RULES — follow exactly:
+- Extract ALL fields from ONE statement. If user gives remark + hours in one go, grab both.
+- NEVER ask the user to confirm, repeat back, or verify anything.
+- NEVER say "Is that correct?" or "Let me confirm" or read back a summary.
+- NEVER ask about collaborators.
+- completionDate always defaults to today (${today}) — only ask for date if user said a specific different date you couldn't parse.
+- If remark is missing → ask ONLY for remark. One sentence.
+- If hours is missing → ask ONLY for hours. One sentence.
+- Once all 3 required fields are captured → immediately set nextStep "done". No confirmation step.
+- "done", "submit", "that's it", "yes", "correct", "sounds good", "yep" → nextStep "done".
+- "next" or "skip" → nextStep "skip".
+
+Return ONLY valid JSON on one line, no markdown:
+{"reply":"string","extracted":{"completionDate":"YYYY-MM-DD or null","hours":number_or_null,"collaborators":[],"completionRemark":"string or null"},"nextStep":"continue"}`;
+
+        // Build Gemini multi-turn messages
+        const contents = [
+          { role: 'user', parts: [{ text: `[System context]\n${systemInstruction}\n\n[Current extracted state]\n${JSON.stringify(extracted)}\n\n[First user message or continue below]` }] },
+          { role: 'model', parts: [{ text: '{"reply":"Got it, ready to help.","extracted":{"completionDate":null,"hours":null,"collaborators":[],"completionRemark":null},"nextStep":"continue"}' }] },
+          ...messages,
+        ];
+
+        const geminiResp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents,
+              generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
+            }),
+          }
+        );
+
+        if (!geminiResp.ok) {
+          const errText = await geminiResp.text();
+          return Response.json({ error: `Gemini error: ${errText}` }, { status: 502, headers: corsHeaders });
+        }
+
+        const geminiData = await geminiResp.json();
+        const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim()
+          .replace(/^```json\s*/i, '').replace(/```$/,'').trim();
+
+        try {
+          const parsed = JSON.parse(rawText);
+          return Response.json({
+            reply: parsed.reply || 'Could you repeat that?',
+            extracted: { completionDate: null, hours: null, collaborators: [], completionRemark: null, ...(parsed.extracted || {}) },
+            nextStep: parsed.nextStep || 'continue',
+          }, { headers: corsHeaders });
+        } catch {
+          return Response.json({
+            reply: rawText || 'Sorry, could you repeat that?',
+            extracted,
+            nextStep: 'continue',
+          }, { headers: corsHeaders });
+        }
+      }
+
+      // --- MARK WORK ORDER COMPLETE (mechanic) ---
+      if (url.pathname.match(/^\/api\/work-orders\/\d+\/complete$/) && method === 'POST') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const id = url.pathname.split('/')[3];
+        const body = await request.json();
+        const now = isoNow();
+
+        const staffIds = Array.isArray(body.staffIds) ? body.staffIds : [];
+        const staffNames = Array.isArray(body.staffNames) ? body.staffNames : [];
+
+        await env.DB.prepare(`
+          UPDATE WorkOrders SET
+            status = 'PENDING_REVIEW',
+            completedAt = ?,
+            completionHours = ?,
+            completedByStaffIds = ?,
+            completedByNames = ?,
+            rawTranscript = ?,
+            technicianNotes = ?,
+            completionRemark = ?,
+            completionImageUrl = COALESCE(?, completionImageUrl),
+            updatedAt = ?
+          WHERE id = ?
+        `).bind(
+          body.completedAt || now.split('T')[0],
+          body.completionHours || null,
+          JSON.stringify(staffIds),
+          staffNames.join(', ') || null,
+          body.rawTranscript || null,
+          body.technicianNotes || null,
+          body.completionRemark || null,
+          body.completionImageUrl || null,
+          now, id
+        ).run();
+
+        const updated = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(id).first();
+        if (!updated) return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
+        return Response.json(mapWorkOrderRow(updated), { headers: corsHeaders });
+      }
+
+      // --- APPROVE WORK ORDER (manager) ---
+      if (url.pathname.match(/^\/api\/work-orders\/\d+\/approve$/) && method === 'POST') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const id = url.pathname.split('/')[3];
+        const now = isoNow();
+
+        await env.DB.prepare(
+          "UPDATE WorkOrders SET status = 'CLOSE', updatedAt = ? WHERE id = ?"
+        ).bind(now, id).run();
+
+        const updated = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(id).first();
+        if (!updated) return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
+        return Response.json(mapWorkOrderRow(updated), { headers: corsHeaders });
+      }
+
+      // --- CHECK DUPLICATES (batch) ---
+      if (url.pathname === '/api/work-orders/check-duplicates' && method === 'POST') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const body = await request.json();
+        const numbers = Array.isArray(body.workOrderNumbers) ? body.workOrderNumbers : [];
+        if (numbers.length === 0) return Response.json({}, { headers: corsHeaders });
+
+        // Build placeholders: ?,?,?
+        const placeholders = numbers.map(() => '?').join(',');
+        const rows = await env.DB.prepare(
+          `SELECT id, workOrderNumber, status, openDate, buildingCode, buildingName
+           FROM WorkOrders WHERE workOrderNumber IN (${placeholders})`
+        ).bind(...numbers).all();
+
+        const result = {};
+        for (const row of (rows?.results || [])) {
+          result[row.workOrderNumber] = {
+            id: String(row.id),
+            workOrderNumber: row.workOrderNumber,
+            status: row.status || null,
+            openDate: row.openDate || null,
+            buildingCode: row.buildingCode || null,
+            buildingName: row.buildingName || null,
+          };
+        }
+        return Response.json(result, { headers: corsHeaders });
+      }
+
+      // --- UPDATE WORK ORDER ---
+      if (url.pathname.match(/^\/api\/work-orders\/\d+$/) && method === 'PUT') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        await ensureWorkOrderSchema(env.DB);
+        const id = url.pathname.split('/').pop();
+        const body = await request.json();
+        const now = isoNow();
+
+        await env.DB.prepare(`
+          UPDATE WorkOrders SET
+            workOrderNumber = ?, buildingCode = ?, buildingName = ?, roomNumber = ?,
+            equipmentId = ?, equipmentRaw = ?, requester = ?, requestDescription = ?,
+            status = ?, priority = ?, craft = ?, openDate = ?, completeDate = ?,
+            actualHours = ?, actualLabourCost = ?, actualTotalCost = ?,
+            technicianNotes = ?, completionRemark = ?,
+            pdfUrl = COALESCE(?, pdfUrl),
+            pageNumber = ?, pageCount = ?,
+            assignedToStaffId = ?, assignedToName = ?,
+            updatedAt = ?
+          WHERE id = ?
+        `).bind(
+          body.workOrderNumber, body.buildingCode || null, body.buildingName || null, body.roomNumber || null,
+          body.equipmentId || null, body.equipmentRaw || null,
+          body.requester || null, body.requestDescription || null,
+          body.status || null, body.priority || null, body.craft || null,
+          body.openDate || null, body.completeDate || null,
+          body.actualHours ?? 0, body.actualLabourCost ?? 0, body.actualTotalCost ?? 0,
+          body.technicianNotes || null, body.completionRemark || null,
+          body.pdfUrl || null,
+          body.pageNumber ?? 1, body.pageCount ?? 1,
+          body.assignedToStaffId || null, body.assignedToName || null,
+          now, id
+        ).run();
+
+        // Replace technician rows if provided
+        if (Array.isArray(body.technicians)) {
+          await env.DB.prepare("DELETE FROM WorkOrderTechnicians WHERE workOrderId = ?").bind(id).run();
+          for (const t of body.technicians) {
+            await env.DB.prepare(
+              "INSERT INTO WorkOrderTechnicians (workOrderId, employeeNumber, craft, hours, rate, totalCost) VALUES (?,?,?,?,?,?)"
+            ).bind(id, t.employeeNumber || null, t.craft || null, t.hours || null, t.rate || null, t.totalCost || null).run();
+          }
+        }
+
+        const updated = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(id).first();
+        if (!updated) return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
+        return Response.json(mapWorkOrderRow(updated), { headers: corsHeaders });
+      }
+
+      if (url.pathname.startsWith('/api/work-orders/') && method === 'GET') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const id = url.pathname.split('/').pop();
+        const row = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(id).first();
+        if (!row) return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
+        const wo = mapWorkOrderRow(row);
+
+        const techRows = await env.DB.prepare(
+          "SELECT * FROM WorkOrderTechnicians WHERE workOrderId = ? ORDER BY id ASC"
+        ).bind(id).all();
+        wo.technicians = (techRows?.results || []).map(t => ({
+          id: String(t.id), workOrderId: String(t.workOrderId),
+          employeeNumber: t.employeeNumber || null, staffId: t.staffId ? String(t.staffId) : null,
+          craft: t.craft || null, hours: t.hours ?? null, rate: t.rate ?? null, totalCost: t.totalCost ?? null,
+        }));
+
+        const annRows = await env.DB.prepare(
+          "SELECT * FROM WorkOrderAnnotations WHERE workOrderId = ? ORDER BY createdAt DESC"
+        ).bind(id).all();
+        wo.annotations = (annRows?.results || []).map(a => ({
+          id: String(a.id), workOrderId: String(a.workOrderId),
+          staffId: a.staffId ? String(a.staffId) : null,
+          authorName: a.authorName, text: a.text, createdAt: a.createdAt,
+        }));
+
+        return Response.json(wo, { headers: corsHeaders });
+      }
+
+      // --- CREATE WORK ORDER ---
+      if (url.pathname === '/api/work-orders' && method === 'POST') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const body = await request.json();
+        const now = isoNow();
+
+        const result = await env.DB.prepare(`
+          INSERT INTO WorkOrders (
+            workOrderNumber, buildingCode, buildingName, roomNumber,
+            equipmentId, equipmentRaw, requester, requestDescription,
+            status, priority, craft, openDate, completeDate,
+            actualHours, actualLabourCost, actualTotalCost,
+            technicianNotes, completionRemark, pdfUrl, pageNumber, pageCount, source,
+            createdAt, updatedAt
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *
+        `).bind(
+          body.workOrderNumber || '',
+          body.buildingCode || null, body.buildingName || null, body.roomNumber || null,
+          body.equipmentId || null, body.equipmentRaw || null,
+          body.requester || null, body.requestDescription || null,
+          body.status || null, body.priority || null, body.craft || null,
+          body.openDate || null, body.completeDate || null,
+          body.actualHours || 0, body.actualLabourCost || 0, body.actualTotalCost || 0,
+          body.technicianNotes || null, body.completionRemark || null,
+          body.pdfUrl || null, body.pageNumber || 1, body.pageCount || 1, body.source || 'pdf',
+          now, now
+        ).first();
+
+        // Insert technicians
+        const technicians = Array.isArray(body.technicians) ? body.technicians : [];
+        for (const t of technicians) {
+          await env.DB.prepare(
+            "INSERT INTO WorkOrderTechnicians (workOrderId, employeeNumber, craft, hours, rate, totalCost) VALUES (?,?,?,?,?,?)"
+          ).bind(result.id, t.employeeNumber || null, t.craft || null, t.hours || null, t.rate || null, t.totalCost || null).run();
+        }
+
+        return Response.json(mapWorkOrderRow(result), { headers: corsHeaders });
+      }
+
+      // --- DELETE WORK ORDER ---
+      if (url.pathname.startsWith('/api/work-orders/') && !url.pathname.includes('/annotations') && method === 'DELETE') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const id = url.pathname.split('/').pop();
+        await env.DB.prepare("DELETE FROM WorkOrderAnnotations WHERE workOrderId = ?").bind(id).run();
+        await env.DB.prepare("DELETE FROM WorkOrderTechnicians WHERE workOrderId = ?").bind(id).run();
+        await env.DB.prepare("DELETE FROM WorkOrders WHERE id = ?").bind(id).run();
+        return Response.json({ success: true }, { headers: corsHeaders });
+      }
+
+      // --- ADD ANNOTATION ---
+      if (url.pathname.match(/^\/api\/work-orders\/\d+\/annotations$/) && method === 'POST') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const workOrderId = url.pathname.split('/')[3];
+        const body = await request.json();
+        const authorName = body.authorName ? String(body.authorName).trim() : null;
+        const text = body.text ? String(body.text).trim() : null;
+        if (!authorName || !text) {
+          return Response.json({ error: 'authorName and text are required' }, { status: 400, headers: corsHeaders });
+        }
+        const now = isoNow();
+        const row = await env.DB.prepare(
+          "INSERT INTO WorkOrderAnnotations (workOrderId, staffId, authorName, text, createdAt) VALUES (?,?,?,?,?) RETURNING *"
+        ).bind(workOrderId, body.staffId || null, authorName, text, now).first();
+        return Response.json({
+          id: String(row.id), workOrderId: String(row.workOrderId),
+          staffId: row.staffId ? String(row.staffId) : null,
+          authorName: row.authorName, text: row.text, createdAt: row.createdAt,
+        }, { headers: corsHeaders });
       }
 
       return new Response('Not Found', { status: 404, headers: corsHeaders });
