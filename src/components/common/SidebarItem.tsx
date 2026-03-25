@@ -6,19 +6,23 @@ interface SidebarItemProps {
   label: string;
   active: boolean;
   onClick: () => void;
+  collapsed?: boolean;
 }
 
-export const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, active, onClick }) => (
-  <button 
+export const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, active, onClick, collapsed = false }) => (
+  <button
     onClick={onClick}
-    className={`w-full flex items-center space-x-3 px-6 py-2.5 mx-2 rounded-md transition-colors text-sm ${
-      active 
-        ? 'bg-brand-600 text-white font-medium' 
+    title={collapsed ? label : undefined}
+    className={`w-full flex items-center transition-colors text-sm rounded-md mx-2 py-2.5 ${
+      collapsed ? 'justify-center px-0' : 'space-x-3 px-6'
+    } ${
+      active
+        ? 'bg-brand-600 text-white font-medium'
         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
     }`}
   >
     <Icon size={18} />
-    <span>{label}</span>
+    {!collapsed && <span>{label}</span>}
   </button>
 );
 
