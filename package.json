@@ -18,7 +18,9 @@
     "fuse.js": "^7.1.0",
     "lucide-react": "^0.562.0",
     "pdfjs-dist": "^5.5.207",
+    "playwright": "^1.58.2",
     "prop-types": "^15.8.1",
+    "puppeteer-core": "^24.40.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-is": "^19.2.3",
@@ -37,5 +39,18 @@
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^4.0.17"
-  }
+  },
+  "description": "",
+  "main": "submit.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Madziyi/maintenance.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Madziyi/maintenance/issues"
+  },
+  "homepage": "https://github.com/Madziyi/maintenance#readme"
 }

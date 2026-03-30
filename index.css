@@ -1,0 +1,19 @@
+/* Global base — Tailwind handles most utilities via CDN; this layer adds polish. */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Accessible focus for native controls without component-level rings */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #4755d9;
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}

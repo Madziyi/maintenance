@@ -10,8 +10,8 @@ import { initSentry } from './src/lib/sentry';
 
 const ErrorFallback: React.FC = () => {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-lg border border-slate-200 max-w-2xl w-full p-8">
+    <div className="min-h-screen bg-surface-canvas flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-card ring-1 ring-slate-900/5 max-w-2xl w-full p-8">
         <div className="flex items-center gap-4 mb-6">
           <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
             <span className="text-red-600 text-2xl">⚠️</span>
@@ -23,7 +23,7 @@ const ErrorFallback: React.FC = () => {
         </div>
         <button
           onClick={() => window.location.href = '/'}
-          className="w-full px-6 py-3 bg-brand-600 text-white rounded-lg font-medium hover:bg-brand-700 transition-colors"
+          className="w-full px-6 py-3 bg-brand-600 text-white rounded-full font-medium hover:bg-brand-700 transition-colors shadow-soft"
         >
           Go to Home
         </button>

@@ -8,7 +8,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Send, X, CheckCircle2, Loader2,
   Calendar, Clock, Users, FileText, Volume2, VolumeX,
-  ChevronRight, RotateCcw,
+  ChevronRight, RotateCcw, ArrowRightLeft,
 } from 'lucide-react';
 import { PushToTalkMic } from '../common/PushToTalkMic';
 import { api } from '../../../api';
@@ -41,9 +41,10 @@ interface Props {
     rawTranscript: string;
   }) => Promise<void>;
   onClose: () => void;
-  /** If true, shows "Skip" button and calls onSkip when user says "next"/"skip" */
+  /** If true, shows "Skip" and "Pass On" buttons flanking the mic */
   endOfDayMode?: boolean;
   onSkip?: () => void;
+  onPassOn?: () => void;
 }
 
 // ─── Speech helpers ───────────────────────────────────────────────────────────
@@ -139,7 +140,7 @@ function FieldCard({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const CompletionChat: React.FC<Props> = ({
-  wo, staffList, onComplete, onClose, endOfDayMode = false, onSkip,
+  wo, staffList, onComplete, onClose, endOfDayMode = false, onSkip, onPassOn,
 }) => {
   const today = new Date().toISOString().slice(0, 10);
   const staffNames = staffList.filter(s => s.active).map(s => s.name);
@@ -166,10 +167,10 @@ export const CompletionChat: React.FC<Props> = ({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Scroll chat to bottom ──
+  // ── Scroll chat to bottom (messages + live transcript) ──
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, liveRawTranscript, isRecording]);
 
   // ── Countdown auto-submit ──
   useEffect(() => {
@@ -327,8 +328,7 @@ export const CompletionChat: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-      <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col"
-        style={{ height: '100dvh', maxHeight: '100dvh' }}>
+      <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col h-[100dvh] max-h-[100dvh] sm:h-[90vh] sm:max-h-[720px]">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-slate-100 shrink-0">
@@ -410,6 +410,15 @@ export const CompletionChat: React.FC<Props> = ({
             </div>
           )}
 
+          {/* Live transcript — appears as a pending user bubble while recording */}
+          {isRecording && !textMode && (
+            <div className="flex justify-end">
+              <div className="max-w-[82%] px-4 py-2.5 rounded-2xl rounded-br-sm text-sm leading-relaxed bg-indigo-400/70 text-white italic">
+                {liveRawTranscript || 'Listening…'}
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="text-center text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">
               {error} — <button className="underline" onClick={() => setError(null)}>dismiss</button>
@@ -445,58 +454,91 @@ export const CompletionChat: React.FC<Props> = ({
                 <Volume2 size={12} className="animate-pulse" /> Speaking…
               </span>
             ) : isRecording && !textMode ? (
-              <span className="text-xs text-indigo-500">Recording… release mic to send</span>
+              <span className="text-xs text-indigo-500 animate-pulse">● Recording — release to send</span>
             ) : phase === 'idle' && !textMode ? (
               <span className="text-xs text-slate-400">Hold mic to speak</span>
             ) : null}
           </div>
 
+          {/* Voice action bar */}
           {!textMode && (
-            <div className="min-h-12 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-slate-400 font-medium">Live transcript</p>
-              <p className="text-xs text-slate-700 mt-1 leading-relaxed">
-                {liveRawTranscript || (isRecording ? 'Listening…' : 'Hold the mic to dictate your notes.')}
-              </p>
-            </div>
-          )}
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3">
+              <div className="grid grid-cols-3 items-center gap-2">
 
-          {/* Voice row */}
-          {!textMode && (
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {endOfDayMode && onSkip && (
-                <button
-                  onClick={onSkip}
-                  className="px-4 py-2 min-h-11 text-sm text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-                >
-                  Skip <ChevronRight size={14} className="inline" />
-                </button>
-              )}
+                {/* Left — Skip or Submit */}
+                <div className="flex justify-center">
+                  {endOfDayMode && onSkip ? (
+                    <button
+                      onClick={onSkip}
+                      className="w-full py-3 text-sm text-slate-500 border border-slate-200 bg-white rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-1 font-medium"
+                    >
+                      <ChevronRight size={14} /> Skip
+                    </button>
+                  ) : allFilled ? (
+                    <button
+                      onClick={() => handleSubmit()}
+                      disabled={submitting}
+                      className="w-full py-3 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                      Submit
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+                </div>
 
-              {/* Push-to-talk mic */}
-              <PushToTalkMic
-                size="lg"
-                autoClean
-                onTranscript={handleVoiceTranscript}
-                onLiveTranscript={setLiveRawTranscript}
-                onRecordStart={() => {
-                  setIsRecording(true);
-                  setLiveRawTranscript('');
-                }}
-                onRecordEnd={() => {
-                  setIsRecording(false);
-                }}
-                disabled={micDisabled}
-              />
+                {/* Centre — Mic */}
+                <div className="flex justify-center">
+                  <PushToTalkMic
+                    size="lg"
+                    autoClean
+                    onTranscript={handleVoiceTranscript}
+                    onLiveTranscript={setLiveRawTranscript}
+                    onRecordStart={() => { setIsRecording(true); setLiveRawTranscript(''); }}
+                    onRecordEnd={() => { setIsRecording(false); }}
+                    disabled={micDisabled}
+                  />
+                </div>
 
-              {allFilled && (
-                <button
-                  onClick={() => handleSubmit()}
-                  disabled={submitting}
-                  className="px-4 py-2 min-h-11 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                  Submit
-                </button>
+                {/* Right — Pass On (EOD) or Submit (all filled, non-EOD) */}
+                <div className="flex justify-center">
+                  {endOfDayMode && onPassOn ? (
+                    <button
+                      onClick={onPassOn}
+                      disabled={submitting}
+                      className="w-full py-3 text-sm text-amber-700 border border-amber-200 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 font-medium"
+                    >
+                      <ArrowRightLeft size={14} /> Pass On
+                    </button>
+                  ) : !endOfDayMode && allFilled ? (
+                    <button
+                      onClick={() => handleSubmit()}
+                      disabled={submitting}
+                      className="w-full py-3 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                      Submit
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+                </div>
+
+              </div>
+
+              {/* EOD submit row — appears inside the card once all fields are filled */}
+              {endOfDayMode && allFilled && (
+                <div className="mt-2 pt-2 border-t border-slate-200">
+                  <button
+                    onClick={() => handleSubmit()}
+                    disabled={submitting}
+                    className="w-full py-2.5 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    Submit Work Order
+                  </button>
+                </div>
               )}
             </div>
           )}

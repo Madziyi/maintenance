@@ -409,7 +409,7 @@ const App = () => {
   if (loading && data.length === 0) return <LoadingScreen />;
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+    <div className="flex h-screen bg-surface-canvas font-sans text-slate-900 overflow-hidden">
       {/* Sidebar - Desktop */}
       {!isReviewFullScreen && (
       <aside
@@ -623,7 +623,7 @@ const App = () => {
             </div>
         )}
 
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:px-8 md:py-10 scroll-smooth min-h-0">
           <ScrollPositionManager scrollContainerRef={scrollContainerRef} />
           <Routes>
             <Route

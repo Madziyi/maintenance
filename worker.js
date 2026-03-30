@@ -1832,13 +1832,14 @@ STRICT RULES — follow exactly:
 - Extract ALL fields from ONE statement. If user gives remark + hours in one go, grab both.
 - NEVER ask the user to confirm, repeat back, or verify anything.
 - NEVER say "Is that correct?" or "Let me confirm" or read back a summary.
-- NEVER ask about collaborators.
 - completionDate always defaults to today (${today}) — only ask for date if user said a specific different date you couldn't parse.
 - If remark is missing → ask ONLY for remark. One sentence.
 - If hours is missing → ask ONLY for hours. One sentence.
 - Once all 3 required fields are captured → immediately set nextStep "done". No confirmation step.
 - "done", "submit", "that's it", "yes", "correct", "sounds good", "yep" → nextStep "done".
 - "next" or "skip" → nextStep "skip".
+- completionRemark MUST accept ANY response, even extremely simple ones. "work completed", "inspection done", "all good", "nothing found", "done", "fixed it" are ALL valid remarks — use them as-is. NEVER push back on a simple remark or ask for more detail.
+- If the user gives ANY words that could be a remark, extract it. Do not require it to be detailed.
 
 Return ONLY valid JSON on one line, no markdown:
 {"reply":"string","extracted":{"completionDate":"YYYY-MM-DD or null","hours":number_or_null,"collaborators":[],"completionRemark":"string or null"},"nextStep":"continue"}`;

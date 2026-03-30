@@ -7,29 +7,40 @@ import { X, Loader2, CheckCircle2, ChevronRight, User, Mic } from 'lucide-react'
 import { api } from '../../../api';
 import type { WorkOrder, Staff } from '../../../types';
 import { CompletionChat } from './CompletionChat';
+import { PassOnModal } from './PassOnModal';
 
 interface Props {
   staffList: Staff[];
   onClose: () => void;
   onWorkOrderCompleted?: (woId: string) => void;
+  /** Pre-selected staff — skips the "who are you?" step */
+  initialStaff?: Staff | null;
+  /** Pre-loaded work order queue — skips the loading step */
+  initialQueue?: WorkOrder[];
 }
 
 type Step = 'pick-staff' | 'loading' | 'queue' | 'completing' | 'done';
 
-export const EndOfDay: React.FC<Props> = ({ staffList, onClose, onWorkOrderCompleted }) => {
-  const [step, setStep] = useState<Step>('pick-staff');
-  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
-  const [queue, setQueue] = useState<WorkOrder[]>([]);
+export const EndOfDay: React.FC<Props> = ({ staffList, onClose, onWorkOrderCompleted, initialStaff, initialQueue }) => {
+  const preloaded = !!(initialStaff && initialQueue);
+  const [step, setStep] = useState<Step>(() => {
+    if (preloaded) return initialQueue!.length > 0 ? 'queue' : 'done';
+    return 'pick-staff';
+  });
+  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(initialStaff ?? null);
+  const [queue, setQueue] = useState<WorkOrder[]>(initialQueue ?? []);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [completed, setCompleted] = useState<string[]>([]); // WO ids
   const [skipped, setSkipped] = useState<string[]>([]);
+  const [passedOn, setPassedOn] = useState<string[]>([]);
+  const [showPassOn, setShowPassOn] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const activeStaff = staffList.filter(s => s.active);
 
   // ── Load assigned open WOs for selected staff ──
   useEffect(() => {
-    if (!selectedStaff) return;
+    if (!selectedStaff || preloaded) return;
     setStep('loading');
     setLoadError(null);
     api.getWorkOrders({
@@ -50,7 +61,7 @@ export const EndOfDay: React.FC<Props> = ({ staffList, onClose, onWorkOrderCompl
   }, [selectedStaff]);
 
   const currentWO = queue[currentIdx] ?? null;
-  const progress = completed.length + skipped.length;
+  const progress = completed.length + skipped.length + passedOn.length;
   const total = queue.length;
 
   const handleComplete = async (fields: {
@@ -80,6 +91,15 @@ export const EndOfDay: React.FC<Props> = ({ staffList, onClose, onWorkOrderCompl
   const handleSkip = () => {
     if (!currentWO) return;
     setSkipped(prev => [...prev, currentWO.id]);
+    advance();
+  };
+
+  const handlePassOn = () => setShowPassOn(true);
+
+  const handlePassOnDone = () => {
+    if (!currentWO) return;
+    setPassedOn(prev => [...prev, currentWO.id]);
+    setShowPassOn(false);
     advance();
   };
 
@@ -222,7 +242,17 @@ export const EndOfDay: React.FC<Props> = ({ staffList, onClose, onWorkOrderCompl
           onClose={onClose}
           endOfDayMode
           onSkip={handleSkip}
+          onPassOn={handlePassOn}
         />
+
+        {showPassOn && (
+          <PassOnModal
+            wo={currentWO}
+            currentStaff={selectedStaff}
+            onDone={handlePassOnDone}
+            onClose={() => setShowPassOn(false)}
+          />
+        )}
       </>
     );
   }
@@ -242,7 +272,11 @@ export const EndOfDay: React.FC<Props> = ({ staffList, onClose, onWorkOrderCompl
         <p className="text-sm text-slate-500 mb-6">
           {queue.length === 0
             ? `${selectedStaff?.name} has no open assigned work orders.`
-            : `${completed.length} completed · ${skipped.length} skipped`}
+            : [
+                `${completed.length} completed`,
+                skipped.length ? `${skipped.length} skipped` : '',
+                passedOn.length ? `${passedOn.length} passed on` : '',
+              ].filter(Boolean).join(' · ')}
         </p>
         <button
           onClick={onClose}

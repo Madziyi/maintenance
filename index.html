@@ -3,13 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#1e293b" />
     <title>WayFinder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            },
             colors: {
               brand: {
                 50: '#f0f4ff',
@@ -22,11 +28,29 @@
                 700: '#3a45b3',
                 800: '#2d3270',
                 900: '#1e2140',
-              }
-            }
-          }
-        }
-      }
+              },
+              surface: {
+                canvas: '#f4f6fb',
+                muted: '#eef2f7',
+              },
+            },
+            boxShadow: {
+              soft: '0 1px 2px 0 rgb(15 23 42 / 0.04)',
+              card: '0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.05)',
+              'card-hover': '0 10px 15px -3px rgb(15 23 42 / 0.08), 0 4px 6px -4px rgb(15 23 42 / 0.04)',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.35s ease-out forwards',
+            },
+          },
+        },
+      };
     </script>
   <script type="importmap">
 {

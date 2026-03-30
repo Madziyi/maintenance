@@ -2,11 +2,11 @@
  * PassOnModal — shift handoff for a work order.
  *
  * Two paths:
- *  1. Hold mic → speak handoff note → AI cleans → post as annotation + call pass-on API
+ *  1. Hold mic → live transcript shows in real-time → AI cleans → editable preview → pass on
  *  2. Quick button "It's urgent but I couldn't get to it today" → instant pass-on
  */
 import React, { useState } from 'react';
-import { X, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, AlertTriangle, Loader2, CheckCircle2, ArrowRightLeft } from 'lucide-react';
 import { PushToTalkMic } from '../common/PushToTalkMic';
 import { api } from '../../../api';
 import type { WorkOrder, Staff } from '../../../types';
@@ -20,6 +20,8 @@ interface Props {
 
 export const PassOnModal: React.FC<Props> = ({ wo, currentStaff, onDone, onClose }) => {
   const [note, setNote] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +45,8 @@ export const PassOnModal: React.FC<Props> = ({ wo, currentStaff, onDone, onClose
   };
 
   const handleVoiceNote = (cleaned: string) => {
+    setLiveTranscript('');
+    setIsRecording(false);
     setNote(cleaned);
   };
 
@@ -55,14 +59,25 @@ export const PassOnModal: React.FC<Props> = ({ wo, currentStaff, onDone, onClose
     submit("It's urgent but I couldn't get to it today.", 'urgent_incomplete');
   };
 
+  // What to show in the preview box
+  const previewText = isRecording
+    ? liveTranscript
+    : note;
+
+  const previewPlaceholder = isRecording
+    ? 'Listening…'
+    : 'Hold the mic to leave a note for the next person.';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
       <div className="bg-white w-full sm:max-w-md sm:rounded-2xl shadow-2xl overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Pass On Work Order</h2>
+            <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+              <ArrowRightLeft size={15} className="text-amber-500" /> Pass On Work Order
+            </h2>
             <p className="text-xs text-slate-400 mt-0.5 font-mono">WO #{wo.workOrderNumber}</p>
           </div>
           <button onClick={onClose} disabled={submitting}
@@ -77,10 +92,10 @@ export const PassOnModal: React.FC<Props> = ({ wo, currentStaff, onDone, onClose
             <p className="text-sm font-medium text-slate-700">Passed on — manager notified</p>
           </div>
         ) : (
-          <div className="px-5 py-5 space-y-5">
+          <div className="px-5 py-5 space-y-4">
 
-            {/* WO summary */}
-            <p className="text-sm text-slate-600 line-clamp-2">
+            {/* WO description */}
+            <p className="text-sm text-slate-500 line-clamp-2">
               {wo.requestDescription || wo.equipmentRaw || 'Work order'}
             </p>
 
@@ -90,42 +105,89 @@ export const PassOnModal: React.FC<Props> = ({ wo, currentStaff, onDone, onClose
               </div>
             )}
 
-            {/* Option 1 — Voice note */}
-            <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                Leave a handoff note
-              </p>
-              <div className="flex items-center gap-3">
-                <PushToTalkMic
-                  size="md"
-                  autoClean
-                  onTranscript={handleVoiceNote}
-                  disabled={submitting}
-                />
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Hold the mic and tell the next person what you found and what still needs doing.
+            {/* Note preview — always visible */}
+            <div className={`rounded-xl border transition-colors ${
+              isRecording
+                ? 'border-indigo-300 bg-indigo-50'
+                : note
+                ? 'border-slate-200 bg-white'
+                : 'border-slate-100 bg-slate-50'
+            }`}>
+              <div className="px-3 pt-2.5 pb-1 flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">
+                  {isRecording ? '● Recording' : note ? 'Handoff note' : 'Handoff note'}
                 </p>
+                {note && !isRecording && (
+                  <p className="text-[10px] text-slate-400">tap to edit</p>
+                )}
               </div>
+              <textarea
+                value={isRecording ? liveTranscript : note}
+                onChange={e => { if (!isRecording) setNote(e.target.value); }}
+                readOnly={isRecording}
+                rows={3}
+                placeholder={previewPlaceholder}
+                className={`w-full text-sm px-3 pb-3 bg-transparent resize-none focus:outline-none leading-relaxed ${
+                  isRecording
+                    ? 'text-indigo-700 italic placeholder:text-indigo-400'
+                    : note
+                    ? 'text-slate-800'
+                    : 'text-slate-400 placeholder:text-slate-300'
+                }`}
+              />
+            </div>
 
-              {note && (
-                <div className="space-y-2">
-                  <textarea
-                    value={note}
-                    onChange={e => setNote(e.target.value)}
-                    rows={3}
-                    className="w-full text-sm px-3 py-2 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                  />
-                  <button
-                    onClick={handleSubmitNote}
-                    disabled={submitting || !note.trim()}
-                    className="w-full py-2.5 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                  >
-                    {submitting
-                      ? <><Loader2 size={14} className="animate-spin" /> Passing on…</>
-                      : 'Pass On with Note'}
-                  </button>
+            {/* Solid mic action card */}
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 space-y-2">
+              <div className="grid grid-cols-3 items-center gap-2">
+
+                {/* Left — status label */}
+                <div className="flex justify-center">
+                  <p className="text-xs text-slate-400 text-center leading-tight">
+                    {isRecording
+                      ? <span className="text-indigo-500 animate-pulse font-medium">● Recording</span>
+                      : note
+                      ? <span className="text-emerald-600 font-medium">Note ready</span>
+                      : <span>Hold to<br/>speak</span>}
+                  </p>
                 </div>
-              )}
+
+                {/* Centre — Mic */}
+                <div className="flex justify-center">
+                  <PushToTalkMic
+                    size="lg"
+                    autoClean
+                    onTranscript={handleVoiceNote}
+                    onLiveTranscript={setLiveTranscript}
+                    onRecordStart={() => {
+                      setIsRecording(true);
+                      setLiveTranscript('');
+                      setNote('');
+                    }}
+                    onRecordEnd={() => setIsRecording(false)}
+                    disabled={submitting}
+                  />
+                </div>
+
+                {/* Right — Pass On button (once note is ready) */}
+                <div className="flex justify-center">
+                  {note && !isRecording ? (
+                    <button
+                      onClick={handleSubmitNote}
+                      disabled={submitting || !note.trim()}
+                      className="w-full py-3 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {submitting
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : <ArrowRightLeft size={14} />}
+                      {submitting ? 'Sending…' : 'Send'}
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+                </div>
+
+              </div>
             </div>
 
             {/* Divider */}
@@ -135,7 +197,7 @@ export const PassOnModal: React.FC<Props> = ({ wo, currentStaff, onDone, onClose
               <div className="flex-1 border-t border-slate-100" />
             </div>
 
-            {/* Option 2 — Quick button */}
+            {/* Quick urgent button */}
             <button
               onClick={handleQuick}
               disabled={submitting}
