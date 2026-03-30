@@ -4,22 +4,30 @@
  * Hold the mic button to speak; release to send. AI responds, user holds
  * again to reply. Fully push-to-talk — no silence detection.
  */
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Send, X, CheckCircle2, Loader2,
   Calendar, Clock, Users, FileText, Volume2, VolumeX,
   ChevronRight, RotateCcw, ArrowRightLeft,
 } from 'lucide-react';
+import Fuse from 'fuse.js';
 import { PushToTalkMic } from '../common/PushToTalkMic';
 import { api } from '../../../api';
 import type { WorkOrder, Staff } from '../../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface CollaboratorMatch {
+  spokenName: string;    // what Gemini extracted
+  resolvedName: string;  // matched staff.name
+  staffId: string;       // matched staff.id
+}
+
 interface Extracted {
   completionDate: string | null;
   hours: number | null;
-  collaborators: string[];
+  collaborators: string[];             // raw names from Gemini (used in AI history)
+  collaboratorMatches: CollaboratorMatch[]; // fuzzy-resolved staff-only matches
   completionRemark: string | null;
 }
 
@@ -37,6 +45,7 @@ interface Props {
     completionDate: string;
     hours: number | null;
     collaborators: string[];
+    collaboratorStaffIds: string[];
     completionRemark: string;
     rawTranscript: string;
   }) => Promise<void>;
@@ -102,6 +111,28 @@ function speak(text: string, onEnd?: () => void, muted = false): SpeechSynthesis
   return utt;
 }
 
+// ─── Collaborator fuzzy matching ──────────────────────────────────────────────
+// Tighter threshold (0.35) than general search — name false-positives are costly.
+// Returns only confirmed staff matches; unmatched names stay in the remark text.
+function matchCollaborators(
+  names: string[],
+  staffList: Staff[],
+): CollaboratorMatch[] {
+  if (!names.length || !staffList.length) return [];
+  const fuse = new Fuse(staffList, { keys: ['name'], threshold: 0.35, includeScore: true });
+  const seen = new Set<string>();
+  const matches: CollaboratorMatch[] = [];
+  for (const name of names) {
+    const hit = fuse.search(name)[0];
+    if (!hit || (hit.score ?? 1) > 0.35) continue; // no confident match
+    const staff = hit.item;
+    if (seen.has(staff.id)) continue; // dedupe
+    seen.add(staff.id);
+    matches.push({ spokenName: name, resolvedName: staff.name, staffId: staff.id });
+  }
+  return matches;
+}
+
 // Strip leaked raw JSON — handles both full JSON and truncated/malformed Gemini output
 function safeReply(text: string): string {
   const t = text.trim();
@@ -143,13 +174,14 @@ export const CompletionChat: React.FC<Props> = ({
   wo, staffList, onComplete, onClose, endOfDayMode = false, onSkip, onPassOn,
 }) => {
   const today = new Date().toISOString().slice(0, 10);
-  const staffNames = staffList.filter(s => s.active).map(s => s.name);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const geminiHistory = useRef<{ role: 'user' | 'model'; parts: { text: string }[] }[]>([]);
 
+  const activeStaffList = useMemo(() => staffList.filter(s => s.active), [staffList]);
+
   const [extracted, setExtracted] = useState<Extracted>({
-    completionDate: null, hours: null, collaborators: [], completionRemark: null,
+    completionDate: null, hours: null, collaborators: [], collaboratorMatches: [], completionRemark: null,
   });
 
   const [phase, setPhase] = useState<Phase>('idle');
@@ -209,16 +241,18 @@ export const CompletionChat: React.FC<Props> = ({
           roomNumber: wo.roomNumber,
           equipmentRaw: wo.equipmentRaw,
         },
-        staffNames,
+        staffNames: activeStaffList.map(s => s.name),
         todayDate: today,
       });
 
+      const newCollaborators = result.extracted.collaborators?.length
+        ? result.extracted.collaborators
+        : extracted.collaborators;
       const merged: Extracted = {
         completionDate: result.extracted.completionDate ?? extracted.completionDate,
         hours: result.extracted.hours ?? extracted.hours,
-        collaborators: result.extracted.collaborators?.length
-          ? result.extracted.collaborators
-          : extracted.collaborators,
+        collaborators: newCollaborators,
+        collaboratorMatches: matchCollaborators(newCollaborators, activeStaffList),
         completionRemark: result.extracted.completionRemark ?? extracted.completionRemark,
       };
       setExtracted(merged);
@@ -255,12 +289,14 @@ export const CompletionChat: React.FC<Props> = ({
       setError(e.message);
       setPhase('idle');
     }
-  }, [extracted, wo, staffNames, today, muted, onSkip]);
+  }, [extracted, wo, activeStaffList, today, muted, onSkip]);
 
   // ── Opening greeting on mount ──
   useEffect(() => {
-    const desc = wo.requestDescription || wo.equipmentRaw || '';
-    const greeting = `What are your completion remarks for work order ${desc || wo.workOrderNumber}? Just tell me what happened — date, hours, who you worked with, and what you found.`;
+    const rawDesc = wo.requestDescription || wo.equipmentRaw || `work order ${wo.workOrderNumber}`;
+    // Truncate long descriptions so TTS doesn't read a full paragraph
+    const desc = rawDesc.length > 120 ? rawDesc.slice(0, 117).trimEnd() + '…' : rawDesc;
+    const greeting = `What are your completion remarks for: ${desc}? Just tell me what happened — date, hours, who you worked with, and what you found.`;
 
     setMessages([{ role: 'ai', text: greeting }]);
     geminiHistory.current = [{ role: 'model', parts: [{ text: greeting }] }];
@@ -286,7 +322,8 @@ export const CompletionChat: React.FC<Props> = ({
       await onComplete({
         completionDate: date,
         hours: ext.hours,
-        collaborators: ext.collaborators,
+        collaborators: ext.collaboratorMatches.map(m => m.resolvedName),
+        collaboratorStaffIds: ext.collaboratorMatches.map(m => m.staffId),
         completionRemark: remark,
         rawTranscript: allTranscript.trim(),
       });
@@ -376,7 +413,7 @@ export const CompletionChat: React.FC<Props> = ({
           <FieldCard icon={Clock} label="Hours" value={extracted.hours !== null ? `${extracted.hours}h` : null}
             colour="bg-emerald-50 border-emerald-200 text-emerald-700" />
           <FieldCard icon={Users} label="With"
-            value={extracted.collaborators.length ? extracted.collaborators.join(', ') : null}
+            value={extracted.collaboratorMatches.length ? extracted.collaboratorMatches.map(m => m.resolvedName).join(', ') : null}
             colour="bg-violet-50 border-violet-200 text-violet-700" />
           <FieldCard icon={FileText} label="Remark"
             value={extracted.completionRemark}
@@ -498,6 +535,11 @@ export const CompletionChat: React.FC<Props> = ({
                     onRecordStart={() => { setIsRecording(true); setLiveRawTranscript(''); }}
                     onRecordEnd={() => { setIsRecording(false); }}
                     disabled={micDisabled}
+                    transcriptContext={{
+                      equipmentName: wo.equipmentRaw ?? undefined,
+                      buildingCode: wo.buildingCode ?? undefined,
+                      roomNumber: wo.roomNumber ?? undefined,
+                    }}
                   />
                 </div>
 
@@ -579,7 +621,7 @@ export const CompletionChat: React.FC<Props> = ({
                 window.speechSynthesis?.cancel();
                 setMessages([]);
                 geminiHistory.current = [];
-                setExtracted({ completionDate: null, hours: null, collaborators: [], completionRemark: null });
+                setExtracted({ completionDate: null, hours: null, collaborators: [], collaboratorMatches: [], completionRemark: null });
                 setPhase('idle');
                 setError(null);
                 const greeting = 'Let\'s start over. Tell me about this work order completion.';

@@ -10,6 +10,12 @@ import { api } from '../../../api';
 
 type Size = 'sm' | 'md' | 'lg';
 
+export interface TranscriptContext {
+  equipmentName?: string;
+  buildingCode?: string;
+  roomNumber?: string;
+}
+
 interface Props {
   onTranscript: (cleaned: string, raw: string) => void;
   onLiveTranscript?: (rawInterim: string) => void;
@@ -18,7 +24,53 @@ interface Props {
   disabled?: boolean;
   size?: Size;
   autoClean?: boolean;   // run HVAC-aware cleaner before firing onTranscript
+  transcriptContext?: TranscriptContext; // WO context for smarter cleaning
   className?: string;
+}
+
+// ─── Deterministic pre-normalization ──────────────────────────────────────────
+// Runs before Gemini — catches definite mishearings instantly, free, no latency.
+// Rules are ordered: most specific / context-sensitive first.
+const HVAC_RULES: [RegExp, string][] = [
+  // AHU — mishears as "age you", "a-h-u", "AEHU"
+  [/\bage\s+you\b/gi, 'AHU'],
+  [/\ba[-\s]h[-\s]u\b/gi, 'AHU'],
+  [/\baehu\b/gi, 'AHU'],
+  // RTU — mishears as "our two you", "are-tee-you", "R-T-U"
+  [/\bour\s+two\s+you\b/gi, 'RTU'],
+  [/\bare[-\s]?t(?:ee|wo)?[-\s]?(?:you|u)\b/gi, 'RTU'],
+  [/\br[-\s]t[-\s]u\b/gi, 'RTU'],
+  // VAV — mishears as "V-A-V"; "vague" only near known VAV context words
+  [/\bv[-\s]a[-\s]v\b/gi, 'VAV'],
+  [/\bvague\b(?=\s+(?:box|damper|unit|terminal|valve))/gi, 'VAV'],
+  // FCU — "F-C-U"
+  [/\bf[-\s]c[-\s]u\b/gi, 'FCU'],
+  // MAU — "mae you", "M-A-U"
+  [/\bmae\s+you\b/gi, 'MAU'],
+  [/\bm[-\s]a[-\s]u\b/gi, 'MAU'],
+  // HRU — "H-R-U"
+  [/\bh[-\s]r[-\s]u\b/gi, 'HRU'],
+  // ERV — "E-R-V"
+  [/\be[-\s]r[-\s]v\b/gi, 'ERV'],
+  // VFD — "V-F-D"
+  [/\bv[-\s]f[-\s]d\b/gi, 'VFD'],
+  // BAS — "B-A-S"; "baz" only near system/control context
+  [/\bb[-\s]a[-\s]s\b/gi, 'BAS'],
+  [/\bbaz\b(?=\s+(?:system|sensor|point|control|alarm))/gi, 'BAS'],
+  // BMS — "B-M-S"
+  [/\bb[-\s]m[-\s]s\b/gi, 'BMS'],
+  // DDC — "D-D-C"
+  [/\bd[-\s]d[-\s]c\b/gi, 'DDC'],
+  // Units of measure
+  [/\bp[-\s]s[-\s]i\b/gi, 'PSI'],
+  [/\bg[-\s]p[-\s]m\b/gi, 'GPM'],
+  [/\bc[-\s]f[-\s]m\b/gi, 'CFM'],
+  [/\bb[-\s]t[-\s]u\b/gi, 'BTU'],
+];
+
+function normalizeTranscript(raw: string): string {
+  return HVAC_RULES.reduce((text, [pattern, replacement]) =>
+    text.replace(pattern, replacement), raw);
 }
 
 const AnySpeechRecognition: any =
@@ -42,6 +94,7 @@ export const PushToTalkMic: React.FC<Props> = ({
   disabled = false,
   size = 'md',
   autoClean = true,
+  transcriptContext,
   className = '',
 }) => {
   const [recording, setRecording] = useState(false);
@@ -72,10 +125,21 @@ export const PushToTalkMic: React.FC<Props> = ({
       onLiveTranscript?.(live);
     };
 
-    recog.onerror = () => {
+    recog.onerror = (e: any) => {
+      // 'aborted' fires when we call recog.stop() ourselves — not a real error
+      if (e.error === 'aborted') return;
       setRecording(false);
       onLiveTranscript?.('');
     };
+
+    // continuous=true sessions can still end silently (network hiccup, browser silence
+    // timeout). Restart automatically while the button is still held.
+    recog.onend = () => {
+      if (isDownRef.current) {
+        try { recog.start(); } catch { /* already starting */ }
+      }
+    };
+
     recog.start();
     setRecording(true);
   }, [disabled, onLiveTranscript, recording]);
@@ -92,18 +156,21 @@ export const PushToTalkMic: React.FC<Props> = ({
     onRecordEnd?.(raw);
     if (!raw) return;
 
+    // Always run deterministic normalization first — free, instant, no network
+    const preNormalized = normalizeTranscript(raw);
+
     if (autoClean) {
       setCleaning(true);
       try {
-        const { cleaned } = await api.cleanTranscript(raw);
-        onTranscript(cleaned || raw, raw);
+        const { cleaned } = await api.cleanTranscript(preNormalized, transcriptContext);
+        onTranscript(cleaned || preNormalized, raw);
       } catch {
-        onTranscript(raw, raw); // fall back to raw on error
+        onTranscript(preNormalized, raw); // fall back to pre-normalized on error
       } finally {
         setCleaning(false);
       }
     } else {
-      onTranscript(raw, raw);
+      onTranscript(preNormalized, raw);
     }
   }, [autoClean, onLiveTranscript, onRecordEnd, onTranscript]);
 

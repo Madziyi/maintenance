@@ -446,6 +446,28 @@ export const api = {
     if (!res.ok) { const t = await res.text(); throw new Error(`Failed to delete staff: ${t}`); }
   },
 
+  /** Verify a staff member's PIN. Returns { valid: true } if correct or if no PIN is set. */
+  verifyStaffPin: async (id: string, pin: string): Promise<{ valid: boolean }> => {
+    const res = await fetch(`${API_URL}/api/staff/${id}/verify-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    if (!res.ok) return { valid: false };
+    return res.json();
+  },
+
+  /** Set or clear a staff member's PIN (admin only). Pass null to remove the PIN. */
+  setStaffPin: async (id: string, pin: string | null): Promise<Staff> => {
+    const res = await fetch(`${API_URL}/api/staff/${id}/pin`, {
+      method: 'PUT',
+      headers: writeHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ pin }),
+    });
+    if (!res.ok) { const t = await res.text(); throw new Error(`Failed to set PIN: ${t}`); }
+    return res.json();
+  },
+
   // ─────────────────────────────────────────────
   // Work Orders
   // ─────────────────────────────────────────────
@@ -499,11 +521,14 @@ export const api = {
     return res.json();
   },
 
-  cleanTranscript: async (rawTranscript: string): Promise<{ cleaned: string; summary: string }> => {
+  cleanTranscript: async (
+    rawTranscript: string,
+    context?: { equipmentName?: string; buildingCode?: string; roomNumber?: string },
+  ): Promise<{ cleaned: string; summary: string }> => {
     const res = await fetch(`${API_URL}/api/work-orders/clean-transcript`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rawTranscript }),
+      body: JSON.stringify({ rawTranscript, context }),
     });
     if (!res.ok) { const t = await res.text(); throw new Error(`Transcript cleanup failed: ${t}`); }
     return res.json();

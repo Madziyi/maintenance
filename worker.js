@@ -32,6 +32,7 @@ function isoNow() {
 let equipmentReviewSchemaEnsured = false;
 let equipmentChangeLogSchemaEnsured = false;
 let workOrderSchemaEnsured = false;
+let transcriptLogSchemaEnsured = false;
 
 async function ensureWorkOrderSchema(db) {
   if (workOrderSchemaEnsured) return;
@@ -129,6 +130,11 @@ async function ensureWorkOrderSchema(db) {
       await db.prepare("ALTER TABLE Staff ADD COLUMN category TEXT").run();
     } catch (_) { /* already exists */ }
 
+    // Staff PIN (5-digit, nullable — null means no PIN required)
+    try {
+      await db.prepare("ALTER TABLE Staff ADD COLUMN pin TEXT").run();
+    } catch (_) { /* already exists */ }
+
     // Handoff tracking table
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS WorkOrderHandoffs (
@@ -224,6 +230,29 @@ async function ensureEquipmentChangeLogSchema(db) {
     console.warn("ensureEquipmentChangeLogSchema failed:", e?.message || String(e));
   } finally {
     equipmentChangeLogSchemaEnsured = true;
+  }
+}
+
+async function ensureTranscriptLogSchema(db) {
+  if (transcriptLogSchemaEnsured) return;
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS TranscriptLog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rawTranscript TEXT NOT NULL,
+        cleanedTranscript TEXT NOT NULL,
+        summary TEXT,
+        equipmentName TEXT,
+        buildingCode TEXT,
+        roomNumber TEXT,
+        createdAt TEXT NOT NULL
+      )
+    `).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_tl_createdAt ON TranscriptLog(createdAt)").run();
+  } catch (e) {
+    console.warn("ensureTranscriptLogSchema failed:", e?.message || String(e));
+  } finally {
+    transcriptLogSchemaEnsured = true;
   }
 }
 
@@ -1314,9 +1343,42 @@ export default {
           craft: r.craft || null,
           category: r.category || null,
           active: r.active === 1,
+          hasPin: !!r.pin,
           createdAt: r.createdAt,
         }));
         return Response.json(staff, { headers: corsHeaders });
+      }
+
+      // --- VERIFY STAFF PIN ---
+      if (url.pathname.match(/^\/api\/staff\/[^/]+\/verify-pin$/) && method === 'POST') {
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const id = url.pathname.split('/')[3];
+        const body = await request.json();
+        const entered = String(body.pin ?? '').trim();
+        const row = await env.DB.prepare("SELECT pin FROM Staff WHERE id = ?").bind(id).first();
+        if (!row) return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
+        if (!row.pin) return Response.json({ valid: true }, { headers: corsHeaders }); // no PIN set — always valid
+        return Response.json({ valid: entered === row.pin }, { headers: corsHeaders });
+      }
+
+      // --- SET / CLEAR STAFF PIN ---
+      if (url.pathname.match(/^\/api\/staff\/[^/]+\/pin$/) && method === 'PUT') {
+        const authError = validateWrite(request); if (authError) return authError;
+        if (!env.DB) throw new Error("DB binding not found on env");
+        const id = url.pathname.split('/')[3];
+        const body = await request.json();
+        const pin = body.pin ? String(body.pin).trim() : null;
+        if (pin && !/^\d{5}$/.test(pin)) {
+          return Response.json({ error: 'PIN must be exactly 5 digits' }, { status: 400, headers: corsHeaders });
+        }
+        await env.DB.prepare("UPDATE Staff SET pin = ? WHERE id = ?").bind(pin, id).run();
+        const row = await env.DB.prepare("SELECT * FROM Staff WHERE id = ?").bind(id).first();
+        if (!row) return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
+        return Response.json({
+          id: String(row.id), name: row.name, employeeNumber: row.employeeNumber || null,
+          craft: row.craft || null, category: row.category || null, active: row.active === 1,
+          hasPin: !!row.pin, createdAt: row.createdAt,
+        }, { headers: corsHeaders });
       }
 
       // --- CREATE STAFF ---
@@ -1332,7 +1394,8 @@ export default {
         ).bind(name, body.employeeNumber || null, body.craft || null, body.category || null, now).first();
         return Response.json({
           id: String(row.id), name: row.name, employeeNumber: row.employeeNumber || null,
-          craft: row.craft || null, category: row.category || null, active: true, createdAt: row.createdAt,
+          craft: row.craft || null, category: row.category || null, active: true,
+          hasPin: !!row.pin, createdAt: row.createdAt,
         }, { headers: corsHeaders });
       }
 
@@ -1355,7 +1418,8 @@ export default {
         ).bind(name, employeeNumber, craft, category, active, id).first();
         return Response.json({
           id: String(row.id), name: row.name, employeeNumber: row.employeeNumber || null,
-          craft: row.craft || null, category: row.category || null, active: row.active === 1, createdAt: row.createdAt,
+          craft: row.craft || null, category: row.category || null, active: row.active === 1,
+          hasPin: !!row.pin, createdAt: row.createdAt,
         }, { headers: corsHeaders });
       }
 
@@ -1682,22 +1746,32 @@ export default {
           return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 503, headers: corsHeaders });
         }
 
-        const prompt = `You are a facility maintenance transcription assistant at a university. A technician dictated their work notes via voice recognition. Clean up the raw transcript into professional, readable text.
+        const ctx = body.context || {};
+        const contextHints = [
+          ctx.equipmentName ? `Equipment being worked on: "${ctx.equipmentName}" — if the technician says something phonetically similar to this name, correct it to this exact name.` : '',
+          ctx.buildingCode  ? `Building code: "${ctx.buildingCode}" — treat this as a known proper noun.` : '',
+          ctx.roomNumber    ? `Room number: "${ctx.roomNumber}".` : '',
+        ].filter(Boolean).join('\n');
 
-CRITICAL — always correct these HVAC/building systems abbreviations when speech recognition mishears them:
-- "age you" / "AJ" / "AEHU" / "a-h-u" → AHU (Air Handling Unit)
-- "are two you" / "R2U" / "our two you" → RTU (Roof Top Unit)
-- "vav" / "V-A-V" / "vague" → VAV (Variable Air Volume)
-- "fcu" / "F-C-U" / "few" → FCU (Fan Coil Unit)
-- "bas" / "B-A-S" / "baz" → BAS (Building Automation System)
-- "bms" / "B-M-S" → BMS (Building Management System)
-- "vfd" / "V-F-D" → VFD (Variable Frequency Drive)
-- "ddc" / "D-D-C" → DDC (Direct Digital Control)
-- "mae you" / "MAU" → MAU (Makeup Air Unit)
-- "hru" / "H-R-U" → HRU (Heat Recovery Unit)
-- "chiller" stays as chiller, "cooling tower" stays, "boiler" stays
-- "psi" / "P-S-I" → PSI, "gpm" → GPM, "cfm" → CFM
-- Building codes like "LAM", "OPS", "ERB", "CEI", "AHF", etc. should be uppercase
+        const prompt = `You are a facility maintenance transcription assistant at a university. A technician dictated their work notes via voice recognition. The transcript has already had basic regex replacements applied, but may still contain errors. Clean it into professional, readable text.
+
+HOW SPEECH RECOGNITION MISHEARS HVAC ABBREVIATIONS (phonetic patterns to watch for):
+Speech recognition hears letter-by-letter pronunciations or phonetic approximations. When you see these patterns near HVAC context words (filter, coil, unit, damper, duct, valve, fan, compressor, motor, belt, bearing, sensor, pump), correct them:
+- "age you" / "a-h-u" / "AEHU" → AHU (Air Handling Unit) — very common, "age you" is the #1 mishearing
+- "our two you" / "are tee you" / "r-t-u" → RTU (Roof Top Unit)
+- "v-a-v" / "vague" (near "box" or "damper") → VAV (Variable Air Volume)
+- "f-c-u" / "few" (near "coil" or "unit") → FCU (Fan Coil Unit)
+- "m-a-u" / "mae you" → MAU (Makeup Air Unit)
+- "h-r-u" → HRU (Heat Recovery Unit)
+- "e-r-v" → ERV (Energy Recovery Ventilator)
+- "v-f-d" → VFD (Variable Frequency Drive)
+- "b-a-s" / "baz" (near "system" or "control") → BAS (Building Automation System)
+- "b-m-s" → BMS (Building Management System)
+- "d-d-c" → DDC (Direct Digital Control)
+- "p-s-i" → PSI, "g-p-m" → GPM, "c-f-m" → CFM, "b-t-u" → BTU
+- Building codes (LAM, OPS, ERB, CEI, AHF, ENG, MAC, etc.) should always be uppercase
+- Spoken numbers like "forty five" → 45, "one hundred" → 100 when they are measurements
+- "chiller", "cooling tower", "boiler", "compressor", "condenser" — keep these as-is${contextHints ? `\n\nWORK ORDER CONTEXT (use this to improve accuracy):\n${contextHints}` : ''}
 
 Raw voice transcript: """${rawTranscript}"""
 
@@ -1708,7 +1782,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
 }`;
 
         const geminiResp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${env.GEMINI_API_KEY}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1726,13 +1800,37 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
         const geminiData = await geminiResp.json();
         const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+        let cleaned = rawTranscript;
+        let summary = '';
         try {
           const parsed = JSON.parse(rawText);
-          return Response.json({ cleaned: parsed.cleaned || rawTranscript, summary: parsed.summary || '' }, { headers: corsHeaders });
+          cleaned = parsed.cleaned || rawTranscript;
+          summary = parsed.summary || '';
         } catch {
-          // Gemini returned non-JSON — return raw text as cleaned, no summary
-          return Response.json({ cleaned: rawText || rawTranscript, summary: '' }, { headers: corsHeaders });
+          // Gemini returned non-JSON — use raw text as cleaned
+          cleaned = rawText || rawTranscript;
         }
+
+        // Fire-and-forget: log raw→cleaned pair to D1 for future analysis
+        if (env.DB) {
+          (async () => {
+            try {
+              await ensureTranscriptLogSchema(env.DB);
+              await env.DB.prepare(
+                `INSERT INTO TranscriptLog (rawTranscript, cleanedTranscript, summary, equipmentName, buildingCode, roomNumber, createdAt)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`
+              ).bind(
+                rawTranscript, cleaned, summary,
+                ctx.equipmentName || null, ctx.buildingCode || null, ctx.roomNumber || null,
+                isoNow()
+              ).run();
+            } catch (e) {
+              console.warn('TranscriptLog insert failed:', e?.message || String(e));
+            }
+          })();
+        }
+
+        return Response.json({ cleaned, summary }, { headers: corsHeaders });
       }
 
       // --- EXTRACT COMPLETION FROM PHOTO (Gemini Vision) ---

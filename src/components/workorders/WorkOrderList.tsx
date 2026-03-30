@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Upload, ClipboardList, ClipboardCheck, Users, ChevronLeft, ChevronRight, SlidersHorizontal, X, CheckCircle2, Loader2, ChevronUp, ChevronDown, ChevronsUpDown, Mic, ScanLine, ArrowRight } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Upload, ClipboardList, ClipboardCheck, Users, ChevronLeft, ChevronRight, SlidersHorizontal, X, CheckCircle2, Loader2, ChevronUp, ChevronDown, ChevronsUpDown, ScanLine, ArrowRight } from 'lucide-react';
 import Fuse from 'fuse.js';
 import { api } from '../../../api';
 import type { WorkOrder, Staff, WorkOrderHandoff } from '../../../types';
@@ -186,6 +186,12 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
   const touchStartXRef = useRef<number>(0);
   const touchStartYRef = useRef<number>(0);
 
+  // PIN gate
+  const [pinStaff, setPinStaff] = useState<Staff | null>(null);  // staff awaiting PIN entry
+  const [pinValue, setPinValue] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const [pinVerifying, setPinVerifying] = useState(false);
+
   // Sorting
   const [sortBy, setSortBy] = useState<string>(() => (readSavedState().sortBy as string) ?? 'openDate');
   const [sortDir, setSortDir] = useState<SortDir>(() => (readSavedState().sortDir as SortDir) ?? 'desc');
@@ -249,17 +255,28 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
     setPage(0);
   }, []);
 
-  // Load suggestion data + staff once on mount
+  // Load suggestion data + staff + tab counts once on mount
   useEffect(() => {
     api.getWorkOrderSuggestions().then(setSuggestions).catch(() => {});
     api.getStaff().then(setStaffList).catch(() => {});
+    // Pending review count
+    api.getWorkOrders({ status: 'PENDING_REVIEW', limit: 1 })
+      .then(r => setTabCounts(prev => ({ ...prev, pending: r.total })))
+      .catch(() => {});
+    // Handoffs count
+    api.getHandoffs()
+      .then(h => setTabCounts(prev => ({ ...prev, handoffs: h.length })))
+      .catch(() => {});
   }, []);
 
-  // Fetch handoffs whenever that tab is active
+  // Fetch handoffs whenever that tab is active; keep tab count in sync
   useEffect(() => {
     if (tab !== 'handoffs') return;
     setHandoffsLoading(true);
-    api.getHandoffs().then(setHandoffs).catch(() => setHandoffs([])).finally(() => setHandoffsLoading(false));
+    api.getHandoffs()
+      .then(h => { setHandoffs(h); setTabCounts(prev => ({ ...prev, handoffs: h.length })); })
+      .catch(() => setHandoffs([]))
+      .finally(() => setHandoffsLoading(false));
   }, [tab]);
 
   // Fetch work orders for selected employee (employee portal)
@@ -388,12 +405,6 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
             <button onClick={() => setSelectedStaff(null)} className="p-2 rounded-xl hover:bg-slate-700 transition-colors shrink-0">
               <ChevronLeft size={18} />
             </button>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-white truncate">{selectedStaff.name}</p>
-              <p className="text-xs text-slate-400">
-                {employeeWOsLoading ? 'Loading…' : `${employeeWOs.length} work order${employeeWOs.length !== 1 ? 's' : ''}`}
-              </p>
-            </div>
             <button
               onClick={() => setShowEndOfDay(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition-colors shrink-0"
@@ -410,9 +421,9 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
             </button>
           </div>
 
-          {/* WO navigator bar */}
+          {/* WO navigator bar — mobile only */}
           {!employeeWOsLoading && employeeWOs.length > 0 && (
-            <div className="bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between shrink-0">
+            <div className="md:hidden bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between shrink-0">
               <button onClick={goPrev} disabled={currentWOIdx === 0} className="p-1.5 rounded-lg hover:bg-slate-700 disabled:opacity-30 transition-colors">
                 <ChevronLeft size={16} />
               </button>
@@ -437,105 +448,19 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
               <p className="text-sm">Work orders assigned to {selectedStaff.name} will appear here.</p>
             </div>
           ) : currentWO ? (
-            <div
-              key={currentWOIdx}
-              className="flex-1 overflow-y-auto animate-fade-in bg-surface-canvas"
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-            >
-              {/* Action buttons — sticky so always reachable without scrolling */}
-              <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex gap-2 shadow-soft">
-                <button
-                  onClick={() => setPassOnWO(currentWO)}
-                  className="flex-1 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold hover:bg-amber-100 transition-colors"
-                >
-                  Pass On
-                </button>
-                <button
-                  onClick={() => setCompleteWO(currentWO)}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-soft"
-                >
-                  Mark Complete
-                </button>
-              </div>
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
 
-              {/* WO detail card */}
-              <div className="mx-4 mt-4 mb-4 bg-white rounded-2xl shadow-card ring-1 ring-slate-900/5 overflow-hidden">
-                {/* Number + status + description */}
-                <div className="px-5 pt-5 pb-4 border-b border-slate-100">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-3xl font-mono font-bold text-slate-900 tracking-tight">#{currentWO.workOrderNumber}</p>
-                    <StatusBadge status={currentWO.status} />
-                  </div>
-                  {currentWO.priority && (
-                    <p className="text-xs text-slate-500 mt-1">Priority: <span className="font-medium">{currentWO.priority}</span></p>
-                  )}
-                  {currentWO.requestDescription && (
-                    <p className="text-slate-700 mt-3 text-sm leading-relaxed">{currentWO.requestDescription}</p>
-                  )}
-                </div>
-
-                {/* Location */}
-                <div className="px-5 py-4 border-b border-slate-100 grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Building</p>
-                    <p className="text-slate-800 font-mono font-semibold">{currentWO.buildingCode || '—'}</p>
-                    {currentWO.buildingName && <p className="text-xs text-slate-400 mt-0.5">{currentWO.buildingName}</p>}
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Room</p>
-                    <p className="text-slate-800">{currentWO.roomNumber || '—'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Equipment</p>
-                    <p className="text-slate-800">{currentWO.equipmentRaw || '—'}</p>
-                  </div>
-                </div>
-
-                {/* Dates & craft */}
-                <div className="px-5 py-4 border-b border-slate-100 grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Open Date</p>
-                    <p className="text-slate-800 text-sm">{currentWO.openDate || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Craft</p>
-                    <p className="text-slate-800 text-sm">{currentWO.craft || '—'}</p>
-                  </div>
-                </div>
-
-                {/* Technician notes */}
-                {currentWO.technicianNotes && (
-                  <div className="px-5 py-4 border-b border-slate-100">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-2">Technician Notes</p>
-                    <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{currentWO.technicianNotes}</p>
-                  </div>
-                )}
-
-                {/* Completion remark */}
-                {currentWO.completionRemark && (
-                  <div className="px-5 py-4">
-                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-2">Completion Remark</p>
-                    <p className="text-slate-700 text-sm leading-relaxed">{currentWO.completionRemark}</p>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-center text-xs text-slate-300 pb-4 select-none">← swipe to navigate →</p>
-
-              {/* Quick-jump list */}
-              <div className="mx-4 mb-6 bg-white rounded-2xl shadow-card ring-1 ring-slate-900/5 overflow-hidden">
-                <p className="px-4 py-2.5 text-[10px] text-slate-400 uppercase font-semibold tracking-wide border-b border-slate-100">
-                  All work orders
+              {/* ── Left sidebar: All Work Orders (tablet/pc only) ── */}
+              <div className="hidden md:flex flex-col w-1/3 shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
+                <p className="sticky top-0 z-10 bg-white px-4 py-3 text-[10px] text-slate-400 uppercase font-semibold tracking-wide border-b border-slate-100">
+                  All work orders · {employeeWOs.length}
                 </p>
                 {employeeWOs.map((wo, idx) => (
                   <button
                     key={wo.id}
                     onClick={() => setCurrentWOIdx(idx)}
                     className={`w-full text-left px-4 py-3 border-b border-slate-100 last:border-0 transition-colors ${
-                      idx === currentWOIdx
-                        ? 'bg-brand-50'
-                        : 'hover:bg-slate-50'
+                      idx === currentWOIdx ? 'bg-brand-50' : 'hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -553,6 +478,130 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
                   </button>
                 ))}
               </div>
+
+              {/* ── Right: WO detail ── */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Action buttons — sticky at top of right panel */}
+                <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex gap-2 shadow-soft shrink-0">
+                  <button
+                    onClick={() => setPassOnWO(currentWO)}
+                    className="flex-1 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold hover:bg-amber-100 transition-colors"
+                  >
+                    Pass On
+                  </button>
+                  <button
+                    onClick={() => setCompleteWO(currentWO)}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-soft"
+                  >
+                    Mark Complete
+                  </button>
+                </div>
+
+                {/* Scrollable WO content */}
+                <div
+                  key={currentWOIdx}
+                  className="flex-1 overflow-y-auto animate-fade-in bg-surface-canvas"
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={handleTouchEnd}
+                >
+                  {/* WO detail card */}
+                  <div className="mx-4 mt-4 mb-4 bg-white rounded-2xl shadow-card ring-1 ring-slate-900/5 overflow-hidden">
+                    {/* Number + status + description */}
+                    <div className="px-5 pt-5 pb-4 border-b border-slate-100">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-3xl font-mono font-bold text-slate-900 tracking-tight">#{currentWO.workOrderNumber}</p>
+                        <StatusBadge status={currentWO.status} />
+                      </div>
+                      {currentWO.priority && (
+                        <p className="text-xs text-slate-500 mt-1">Priority: <span className="font-medium">{currentWO.priority}</span></p>
+                      )}
+                      {currentWO.requestDescription && (
+                        <p className="text-slate-700 mt-3 text-sm leading-relaxed">{currentWO.requestDescription}</p>
+                      )}
+                    </div>
+
+                    {/* Location */}
+                    <div className="px-5 py-4 border-b border-slate-100 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Building</p>
+                        {currentWO.buildingCode
+                          ? <Link to={`/building/${currentWO.buildingCode}`} className="text-brand-600 hover:underline font-mono font-semibold">{currentWO.buildingCode}</Link>
+                          : <p className="text-slate-800 font-mono font-semibold">—</p>}
+                        {currentWO.buildingName && <p className="text-xs text-slate-400 mt-0.5">{currentWO.buildingName}</p>}
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Room</p>
+                        <p className="text-slate-800">{currentWO.roomNumber || '—'}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Equipment</p>
+                        {currentWO.equipmentId
+                          ? <Link to={`/equipment/${currentWO.equipmentId}`} className="text-brand-600 hover:underline">{currentWO.equipmentRaw || currentWO.equipmentId}</Link>
+                          : <p className="text-slate-800">{currentWO.equipmentRaw || '—'}</p>}
+                      </div>
+                    </div>
+
+                    {/* Dates & craft */}
+                    <div className="px-5 py-4 border-b border-slate-100 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Open Date</p>
+                        <p className="text-slate-800 text-sm">{currentWO.openDate || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-1">Craft</p>
+                        <p className="text-slate-800 text-sm">{currentWO.craft || '—'}</p>
+                      </div>
+                    </div>
+
+                    {/* Technician notes */}
+                    {currentWO.technicianNotes && (
+                      <div className="px-5 py-4 border-b border-slate-100">
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-2">Technician Notes</p>
+                        <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{currentWO.technicianNotes}</p>
+                      </div>
+                    )}
+
+                    {/* Completion remark */}
+                    {currentWO.completionRemark && (
+                      <div className="px-5 py-4">
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-2">Completion Remark</p>
+                        <p className="text-slate-700 text-sm leading-relaxed">{currentWO.completionRemark}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mobile-only swipe hint + quick-jump list */}
+                  <p className="md:hidden text-center text-xs text-slate-300 pb-4 select-none">← swipe to navigate →</p>
+                  <div className="md:hidden mx-4 mb-6 bg-white rounded-2xl shadow-card ring-1 ring-slate-900/5 overflow-hidden">
+                    <p className="px-4 py-2.5 text-[10px] text-slate-400 uppercase font-semibold tracking-wide border-b border-slate-100">
+                      All work orders
+                    </p>
+                    {employeeWOs.map((wo, idx) => (
+                      <button
+                        key={wo.id}
+                        onClick={() => setCurrentWOIdx(idx)}
+                        className={`w-full text-left px-4 py-3 border-b border-slate-100 last:border-0 transition-colors ${
+                          idx === currentWOIdx ? 'bg-brand-50' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={`font-mono text-xs font-bold shrink-0 ${idx === currentWOIdx ? 'text-brand-700' : 'text-slate-500'}`}>
+                            #{wo.workOrderNumber}
+                          </span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{wo.openDate || '—'}</span>
+                        </div>
+                        {wo.requestDescription && (
+                          <p className="text-sm text-slate-700 mt-0.5 line-clamp-1">{wo.requestDescription}</p>
+                        )}
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {[wo.buildingCode, wo.roomNumber].filter(Boolean).join(' · ') || '—'}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
             </div>
           ) : null}
 
@@ -645,7 +694,7 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
             {staffList.filter(s => s.active).map(staff => (
               <button
                 key={staff.id}
-                onClick={() => setSelectedStaff(staff)}
+                onClick={() => { if (staff.hasPin) { setPinStaff(staff); setPinValue(''); setPinError(false); } else { setSelectedStaff(staff); } }}
                 className="bg-white rounded-2xl p-5 shadow-card ring-1 ring-slate-900/5 hover:shadow-card-hover transition-all duration-200 text-center group"
               >
                 <div className="w-14 h-14 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:bg-brand-200 transition-colors">
@@ -654,6 +703,12 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
                 <p className="font-semibold text-slate-800 text-sm leading-tight">{staff.name}</p>
                 {staff.craft && <p className="text-xs text-slate-400 mt-1">{staff.craft}</p>}
                 {staff.category && <p className="text-[10px] text-slate-300 mt-0.5 uppercase tracking-wide">{staff.category}</p>}
+                {staff.hasPin && (
+                  <span className="mt-2 inline-flex items-center gap-1 text-[10px] text-slate-400">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    PIN required
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -661,6 +716,94 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
 
         {showEndOfDay && (
           <EndOfDay staffList={staffList} onClose={() => setShowEndOfDay(false)} onWorkOrderCompleted={() => {}} />
+        )}
+
+        {/* PIN entry modal */}
+        {pinStaff && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
+              <div className="bg-slate-900 px-6 pt-6 pb-5 text-center">
+                <div className="w-14 h-14 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <span className="text-white font-bold text-xl">{pinStaff.name.trim().charAt(0).toUpperCase()}</span>
+                </div>
+                <p className="text-white font-semibold">{pinStaff.name}</p>
+                <p className="text-slate-400 text-xs mt-1">Enter your 5-digit PIN</p>
+              </div>
+
+              <div className="px-6 py-5">
+                {/* 5 dot indicators */}
+                <div className="flex justify-center gap-3 mb-5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all duration-150 ${
+                      i < pinValue.length
+                        ? (pinError ? 'bg-red-500 border-red-500' : 'bg-slate-900 border-slate-900')
+                        : (pinError ? 'border-red-300' : 'border-slate-300')
+                    }`} />
+                  ))}
+                </div>
+
+                {pinError && (
+                  <p className="text-center text-xs text-red-600 mb-3 font-medium">Incorrect PIN. Try again.</p>
+                )}
+
+                {/* Number keypad */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((key, i) => {
+                    if (key === '') return <div key={i} />;
+                    const isBackspace = key === '⌫';
+                    return (
+                      <button
+                        key={i}
+                        disabled={pinVerifying}
+                        onClick={() => {
+                          if (isBackspace) {
+                            setPinValue(v => v.slice(0, -1));
+                            setPinError(false);
+                          } else if (pinValue.length < 5) {
+                            const next = pinValue + String(key);
+                            setPinValue(next);
+                            setPinError(false);
+                            if (next.length === 5) {
+                              setPinVerifying(true);
+                              api.verifyStaffPin(pinStaff.id, next).then(({ valid }) => {
+                                if (valid) {
+                                  setPinStaff(null);
+                                  setPinValue('');
+                                  setSelectedStaff(pinStaff);
+                                } else {
+                                  setPinError(true);
+                                  setPinValue('');
+                                }
+                              }).catch(() => {
+                                setPinError(true);
+                                setPinValue('');
+                              }).finally(() => setPinVerifying(false));
+                            }
+                          }
+                        }}
+                        className={`h-12 rounded-xl text-lg font-semibold transition-colors ${
+                          isBackspace
+                            ? 'text-slate-500 hover:bg-slate-100 active:bg-slate-200'
+                            : 'bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-900'
+                        } disabled:opacity-40`}
+                      >
+                        {pinVerifying && !isBackspace && key === parseInt(pinValue.slice(-1)) ? (
+                          <Loader2 size={16} className="animate-spin mx-auto text-slate-400" />
+                        ) : key}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => { setPinStaff(null); setPinValue(''); setPinError(false); }}
+                  className="w-full mt-4 py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -684,13 +827,22 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                {t === 'all' ? 'All' : t === 'pending' ? 'Pending Review' : (
+                {t === 'all' ? 'All' : t === 'pending' ? (
+                  <span className="flex items-center gap-1">
+                    Pending Review
+                    {tabCounts.pending != null && tabCounts.pending > 0 && (
+                      <span className="ml-0.5 bg-amber-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                        {tabCounts.pending}
+                      </span>
+                    )}
+                  </span>
+                ) : (
                   <span className="flex items-center gap-1">
                     <ArrowRight size={12} />
                     Handoffs
-                    {handoffs.length > 0 && (
+                    {tabCounts.handoffs != null && tabCounts.handoffs > 0 && (
                       <span className="ml-0.5 bg-amber-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                        {handoffs.length}
+                        {tabCounts.handoffs}
                       </span>
                     )}
                   </span>
@@ -716,14 +868,6 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
                 {activeCount}
               </span>
             )}
-          </button>
-
-          <button
-            onClick={() => setShowEndOfDay(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 min-h-11 rounded-full bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors shadow-soft"
-          >
-            <Mic size={15} />
-            <span className="hidden sm:inline">End of Day</span>
           </button>
 
           {canEdit && (
@@ -906,14 +1050,18 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
                   </div>
                   <StatusBadge status={item.status} />
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500" onClick={e => e.stopPropagation()}>
                   <div>
                     <span className="text-slate-400">Equipment: </span>
-                    <span className="text-slate-700">{item.equipmentRaw || '—'}</span>
+                    {item.equipmentId
+                      ? <Link to={`/equipment/${item.equipmentId}`} className="text-brand-600 hover:underline">{item.equipmentRaw || item.equipmentId}</Link>
+                      : <span className="text-slate-700">{item.equipmentRaw || '—'}</span>}
                   </div>
                   <div>
                     <span className="text-slate-400">Building: </span>
-                    <span className="text-slate-700">{item.buildingCode || '—'}</span>
+                    {item.buildingCode
+                      ? <Link to={`/building/${item.buildingCode}`} className="text-brand-600 hover:underline font-mono">{item.buildingCode}</Link>
+                      : <span className="text-slate-700">—</span>}
                   </div>
                   <div className="col-span-2">
                     <span className="text-slate-400">Open Date: </span>
@@ -1139,11 +1287,15 @@ export const WorkOrderList: React.FC<Props> = ({ canEdit }) => {
                         ? <span title={item.requestDescription}>{item.requestDescription}</span>
                         : <span className="text-slate-400">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-700 max-w-[160px] truncate">
-                      {item.equipmentRaw ?? <span className="text-slate-400">—</span>}
+                    <td className="px-4 py-3 max-w-[160px] truncate" onClick={e => e.stopPropagation()}>
+                      {item.equipmentId
+                        ? <Link to={`/equipment/${item.equipmentId}`} className="text-brand-600 hover:underline truncate" title={item.equipmentRaw ?? undefined}>{item.equipmentRaw ?? item.equipmentId}</Link>
+                        : <span className="text-slate-700" title={item.equipmentRaw ?? undefined}>{item.equipmentRaw ?? <span className="text-slate-400">—</span>}</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                      {item.buildingCode ?? <span className="text-slate-400">—</span>}
+                    <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      {item.buildingCode
+                        ? <Link to={`/building/${item.buildingCode}`} className="text-brand-600 hover:underline font-mono">{item.buildingCode}</Link>
+                        : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                       {item.openDate ?? <span className="text-slate-400">—</span>}

@@ -74,6 +74,7 @@ export interface Staff {
   craft: string | null;
   category: StaffCategory | null;
   active: boolean;
+  hasPin: boolean;
   createdAt: string;
 }
 

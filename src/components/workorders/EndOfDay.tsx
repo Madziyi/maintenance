@@ -68,16 +68,28 @@ export const EndOfDay: React.FC<Props> = ({ staffList, onClose, onWorkOrderCompl
     completionDate: string;
     hours: number | null;
     collaborators: string[];
+    collaboratorStaffIds: string[];
     completionRemark: string;
     rawTranscript: string;
   }) => {
     if (!currentWO || !selectedStaff) return;
 
+    // Selected technician is always first; collaborators are already fuzzy-matched by CompletionChat
+    const byIds: string[] = [selectedStaff.id];
+    const byNames: string[] = [selectedStaff.name];
+
+    for (let i = 0; i < fields.collaborators.length; i++) {
+      const id   = fields.collaboratorStaffIds[i];
+      const name = fields.collaborators[i];
+      if (id && !byIds.includes(id))          { byIds.push(id); byNames.push(name); }
+      else if (!id && !byNames.includes(name)) byNames.push(name);
+    }
+
     await api.submitWorkOrderCompletion(currentWO.id, {
       completedAt: fields.completionDate,
       completionHours: fields.hours,
-      staffIds: [selectedStaff.id],
-      staffNames: [selectedStaff.name, ...fields.collaborators],
+      staffIds: byIds,
+      staffNames: byNames,
       rawTranscript: fields.rawTranscript,
       completionRemark: fields.completionRemark,
       technicianNotes: '',

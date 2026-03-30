@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import Fuse from 'fuse.js';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -367,35 +366,28 @@ export const WorkOrderDetail: React.FC<Props> = ({ canEdit }) => {
   };
 
 
-  const staffFuse = useMemo(
-    () => new Fuse(staff, { keys: ['name'], threshold: 0.4 }),
-    [staff]
-  );
-
   const handleChatComplete = async (fields: {
     completionDate: string;
     hours: number | null;
     collaborators: string[];
+    collaboratorStaffIds: string[];
     completionRemark: string;
     rawTranscript: string;
   }) => {
     if (!wo) return;
 
-    // Build completedBy: always include assignee, then fuzzy-match collaborators
+    // Build completedBy: assignee first, then fuzzy-matched collaborators from CompletionChat
     const byIds: string[] = [];
     const byNames: string[] = [];
 
-    // 1. Assignee is always first
     if (wo.assignedToStaffId) byIds.push(wo.assignedToStaffId);
     if (wo.assignedToName)    byNames.push(wo.assignedToName);
 
-    // 2. Add collaborators, fuzzy-matched against staff list, deduped
-    for (const name of fields.collaborators) {
-      const hit = staffFuse.search(name)[0]?.item;
-      const id   = hit ? hit.id   : null;
-      const label = hit ? hit.name : name;
-      if (id && !byIds.includes(id)) { byIds.push(id); byNames.push(label); }
-      else if (!id && !byNames.includes(label)) byNames.push(label);
+    for (let i = 0; i < fields.collaborators.length; i++) {
+      const id   = fields.collaboratorStaffIds[i];
+      const name = fields.collaborators[i];
+      if (id && !byIds.includes(id))          { byIds.push(id); byNames.push(name); }
+      else if (!id && !byNames.includes(name)) byNames.push(name);
     }
 
     const updated = await api.submitWorkOrderCompletion(wo.id, {

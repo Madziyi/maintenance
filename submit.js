@@ -49,26 +49,45 @@ const context = await chromium.launchPersistentContext(
 
 await new Promise(r => setTimeout(r, 3000));
 
-const pages = context.pages();
-const page = pages.length > 0 ? pages[0] : await context.newPage();
+// Create our automation tab first so the window stays open even if we close
+// restored tabs (closing all tabs can make Edge appear to "close/reopen").
+const page = await context.newPage();
+
+// Close any leftover/restored tabs to reduce interference.
+for (const p of context.pages()) {
+  if (p === page) continue;
+  try { await p.close(); } catch {}
+}
+
+const isDryRun = process.env.DRY_RUN === '1';
 
 for (let i = 0; i < submissions.length; i++) {
   const s = submissions[i];
   console.log(`\n📝 Submission ${i + 1}/5: ${s.firstName} ${s.lastName}`);
 
   // Navigate to the form
-  try {
-    await page.goto('https://nsbewindsor.ca/#contact', {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    });
-  } catch {
-    await page.keyboard.press('Control+l');
-    await page.keyboard.type('https://nsbewindsor.ca/#contact', { delay: 20 });
-    await page.keyboard.press('Enter');
+  let navigated = false;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await page.goto('https://nsbewindsor.ca/#contact', {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      });
+      await page.waitForSelector('input[placeholder="Jane"]', { timeout: 30000 });
+      navigated = true;
+      break;
+    } catch {
+      try {
+        await page.keyboard.press('Control+l');
+        await page.keyboard.type('https://nsbewindsor.ca/#contact', { delay: 20 });
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('input[placeholder="Jane"]', { timeout: 30000 });
+        navigated = true;
+        break;
+      } catch {}
+    }
   }
-
-  await page.waitForSelector('input[placeholder="Jane"]', { timeout: 30000 });
+  if (!navigated) throw new Error('Failed to navigate to contact form');
 
   // Fill in the form
   await page.fill('input[placeholder="Jane"]', s.firstName);
@@ -78,14 +97,20 @@ for (let i = 0; i < submissions.length; i++) {
   await page.fill('textarea',                   s.message);
 
   // Submit
-  await page.click('button:has-text("Send Message")');
-  console.log(`   ✅ Submitted!`);
+  if (!isDryRun) {
+    await page.click('button:has-text("Send Message")');
+    console.log(`   ✅ Submitted!`);
+  } else {
+    console.log(`   🧪 DRY_RUN=1 set: skipping submit click`);
+  }
 
   // Wait for form to reset before next submission
-  await page.waitForFunction(() => {
-    const input = document.querySelector('input[placeholder="Jane"]');
-    return input && input.value === '';
-  }, { timeout: 10000 });
+  if (!isDryRun) {
+    await page.waitForFunction(() => {
+      const input = document.querySelector('input[placeholder="Jane"]');
+      return input && input.value === '';
+    }, { timeout: 10000 });
+  }
 
   // Small delay between submissions
   if (i < submissions.length - 1) {

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Check, X, UserCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Pencil, Trash2, Check, X, UserCircle2, Lock, LockOpen } from 'lucide-react';
 import { api } from '../../../api';
 import type { Staff } from '../../../types';
 
@@ -23,6 +23,13 @@ export const StaffManager: React.FC<Props> = ({ canEdit }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<StaffForm>(emptyForm);
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  // PIN management
+  const [pinModalId, setPinModalId] = useState<string | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const pinInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.getStaff()
@@ -114,6 +121,33 @@ export const StaffManager: React.FC<Props> = ({ canEdit }) => {
     }
   };
 
+  // ── PIN ──────────────────────────────────────────────────────────────────────
+
+  const openPinModal = (id: string) => {
+    setPinModalId(id);
+    setPinInput('');
+    setPinError(null);
+    setTimeout(() => pinInputRef.current?.focus(), 50);
+  };
+
+  const savePin = async (id: string, pin: string | null) => {
+    if (pin && !/^\d{5}$/.test(pin)) {
+      setPinError('PIN must be exactly 5 digits');
+      return;
+    }
+    setPinSaving(true);
+    setPinError(null);
+    try {
+      const updated = await api.setStaffPin(id, pin);
+      setStaff(prev => prev.map(s => s.id === id ? updated : s));
+      setPinModalId(null);
+    } catch (err) {
+      setPinError(err instanceof Error ? err.message : 'Failed to save PIN');
+    } finally {
+      setPinSaving(false);
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -163,6 +197,7 @@ export const StaffManager: React.FC<Props> = ({ canEdit }) => {
                 <th className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">Employee #</th>
                 <th className="px-4 py-3 font-medium text-slate-600">Craft</th>
                 <th className="px-4 py-3 font-medium text-slate-600">Status</th>
+                {canEdit && <th className="px-4 py-3 font-medium text-slate-600 text-center">PIN</th>}
                 {canEdit && <th className="px-4 py-3 font-medium text-slate-600 w-24">Actions</th>}
               </tr>
             </thead>
@@ -228,7 +263,7 @@ export const StaffManager: React.FC<Props> = ({ canEdit }) => {
               {/* Staff rows */}
               {staff.length === 0 && !isAdding ? (
                 <tr>
-                  <td colSpan={canEdit ? 5 : 4} className="py-16 text-center">
+                  <td colSpan={canEdit ? 6 : 4} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-slate-400">
                       <UserCircle2 size={40} strokeWidth={1.2} />
                       <p className="font-medium text-slate-500">No staff members yet.</p>
@@ -311,6 +346,24 @@ export const StaffManager: React.FC<Props> = ({ canEdit }) => {
                         </span>
                       </td>
 
+                      {/* PIN */}
+                      {canEdit && (
+                        <td className="px-4 py-2 text-center">
+                          <button
+                            onClick={() => openPinModal(member.id)}
+                            title={member.hasPin ? 'Change or clear PIN' : 'Set PIN'}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              member.hasPin
+                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                            }`}
+                          >
+                            {member.hasPin ? <Lock size={11} /> : <LockOpen size={11} />}
+                            {member.hasPin ? 'Set' : 'None'}
+                          </button>
+                        </td>
+                      )}
+
                       {/* Actions */}
                       {canEdit && (
                         <td className="px-4 py-2">
@@ -370,6 +423,63 @@ export const StaffManager: React.FC<Props> = ({ canEdit }) => {
           </table>
         )}
       </div>
+
+      {/* PIN modal */}
+      {pinModalId && (() => {
+        const member = staff.find(s => s.id === pinModalId);
+        if (!member) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">
+                    {member.hasPin ? 'Change PIN' : 'Set PIN'} — {member.name}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">5 digits, numbers only</p>
+                </div>
+                <button onClick={() => setPinModalId(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="px-5 py-4 space-y-4">
+                {pinError && (
+                  <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{pinError}</p>
+                )}
+                <input
+                  ref={pinInputRef}
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={5}
+                  value={pinInput}
+                  onChange={e => { setPinInput(e.target.value.replace(/\D/g, '').slice(0, 5)); setPinError(null); }}
+                  placeholder="e.g. 84201"
+                  className="w-full px-3 py-2.5 text-center text-2xl font-mono tracking-[0.5em] border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/35 focus:border-brand-500"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => savePin(pinModalId, pinInput)}
+                    disabled={pinInput.length !== 5 || pinSaving}
+                    className="flex-1 py-2.5 bg-brand-600 text-white text-sm font-semibold rounded-xl hover:bg-brand-700 disabled:opacity-40 transition-colors"
+                  >
+                    {pinSaving ? 'Saving…' : 'Save PIN'}
+                  </button>
+                  {member.hasPin && (
+                    <button
+                      onClick={() => savePin(pinModalId, null)}
+                      disabled={pinSaving}
+                      className="px-4 py-2.5 border border-red-200 text-red-600 text-sm font-medium rounded-xl hover:bg-red-50 disabled:opacity-40 transition-colors"
+                    >
+                      Clear PIN
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

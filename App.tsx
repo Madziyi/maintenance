@@ -40,7 +40,8 @@ import {
   LogOut,
   Lock,
   ClipboardList,
-  TrendingUp,
+  DollarSign,
+  DoorClosed,
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
 } from 'lucide-react';
@@ -464,9 +465,9 @@ const App = () => {
           <SidebarItem collapsed={sidebarCollapsed} icon={Check} label="Equipment Review" active={location.pathname.startsWith('/equipment-review')} onClick={() => navigate('/equipment-review')} />
           <SidebarItem collapsed={sidebarCollapsed} icon={Database} label="Spreadsheet" active={location.pathname.startsWith('/spreadsheet')} onClick={() => navigate('/spreadsheet')} />
           <SidebarItem collapsed={sidebarCollapsed} icon={Download} label="Exports" active={location.pathname.startsWith('/exports')} onClick={() => navigate('/exports')} />
-          <SidebarItem collapsed={sidebarCollapsed} icon={MapPin} label="Equipment Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
+          <SidebarItem collapsed={sidebarCollapsed} icon={DoorClosed} label="Equipment Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
           <SidebarItem collapsed={sidebarCollapsed} icon={ClipboardList} label="Work Orders" active={location.pathname.startsWith('/work-orders') && !location.pathname.startsWith('/work-orders/insights')} onClick={() => navigate('/work-orders')} />
-          <SidebarItem collapsed={sidebarCollapsed} icon={TrendingUp} label="Cost Insights" active={location.pathname.startsWith('/work-orders/insights')} onClick={() => navigate('/work-orders/insights')} />
+          <SidebarItem collapsed={sidebarCollapsed} icon={DollarSign} label="Cost Insights" active={location.pathname.startsWith('/work-orders/insights')} onClick={() => navigate('/work-orders/insights')} />
         </nav>
 
         <div className={`border-t border-slate-800 shrink-0 ${sidebarCollapsed ? 'p-3' : 'p-6 space-y-3'}`}>
@@ -544,68 +545,86 @@ const App = () => {
                 <X size={22} />
               </button>
             </div>
-            <div className="flex flex-col space-y-4">
+            <div className="flex flex-col divide-y divide-white/10">
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname === '/' ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
                 <LayoutDashboard size={18} />
                 <span>Dashboard</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/building'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/building') && !location.pathname.startsWith('/rooms') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
                 <BuildingIcon size={18} />
                 <span>Buildings</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/equipment') && !location.pathname.startsWith('/equipment-review') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
                 <Wrench size={18} />
                 <span>Equipment</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/equipment-review'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/equipment-review') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
                 <Check size={18} />
                 <span>Equipment Review</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/spreadsheet'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/spreadsheet') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
                 <Database size={18} />
                 <span>Spreadsheet</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/exports'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/exports') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
                 <Download size={18} />
                 <span>Exports</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/rooms'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/rooms') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
-                <MapPin size={18} />
+                <DoorClosed size={18} />
                 <span>Equipment Rooms</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/work-orders'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/work-orders') && !location.pathname.startsWith('/work-orders/insights') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
                 <ClipboardList size={18} />
                 <span>Work Orders</span>
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); navigate('/work-orders/insights'); }}
-                className="text-left p-3 hover:bg-brand-800 rounded-lg flex items-center gap-3"
+                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
+                  location.pathname.startsWith('/work-orders/insights') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
+                }`}
               >
-                <TrendingUp size={18} />
+                <DollarSign size={18} />
                 <span>Cost Insights</span>
               </button>
               {isAuthenticated ? (
@@ -645,7 +664,7 @@ const App = () => {
                 <Dashboard
                   data={data}
                   isAuthenticated={isAuthenticated}
-                  onLoginClick={() => navigate("/login")}
+                  onViewWorkOrders={() => navigate("/work-orders")}
                   onViewEquipment={() => navigate("/equipment")}
                   onViewBuildings={() => navigate("/building")}
                 />
