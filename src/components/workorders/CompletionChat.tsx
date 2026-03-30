@@ -299,7 +299,7 @@ export const CompletionChat: React.FC<Props> = ({
     const greeting = `What are your completion remarks for: ${desc}? Just tell me what happened — date, hours, who you worked with, and what you found.`;
 
     setMessages([{ role: 'ai', text: greeting }]);
-    geminiHistory.current = [{ role: 'model', parts: [{ text: greeting }] }];
+    geminiHistory.current = []; // greeting is hardcoded UI only — not sent to Gemini
 
     setPhase('speaking');
     speak(greeting, () => { setPhase('idle'); }, muted);
@@ -625,6 +625,7 @@ export const CompletionChat: React.FC<Props> = ({
                 setPhase('idle');
                 setError(null);
                 const greeting = 'Let\'s start over. Tell me about this work order completion.';
+                geminiHistory.current = [];
                 setMessages([{ role: 'ai', text: greeting }]);
                 speak(greeting, () => { setPhase('idle'); }, muted);
               }}

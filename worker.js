@@ -24,6 +24,31 @@ function safeJSONParse(value, fallback = []) {
   }
 }
 
+// Best-effort parse for "JSON only" LLM responses.
+// Handles accidental ```json fences, leading/trailing prose, and extra whitespace.
+function parseSingleLineJsonObject(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+  const cleaned = rawText
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+
+  // 1) Try direct parse first.
+  try { return JSON.parse(cleaned); } catch (_) {}
+
+  // 2) Try to salvage the first full JSON object in the text.
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const slice = cleaned.slice(firstBrace, lastBrace + 1);
+    try { return JSON.parse(slice); } catch (_) {}
+  }
+
+  return null;
+}
+
 // ISO timestamp in UTC (sortable as TEXT)
 function isoNow() {
   return new Date().toISOString();
@@ -1913,40 +1938,53 @@ Return ONLY valid JSON, no markdown:
         const { messages = [], extracted = {}, woContext = {}, staffNames = [], todayDate } = body;
 
         const today = todayDate || new Date().toISOString().slice(0, 10);
-        const systemInstruction = `You are a voice assistant logging a work order completion. Replies must be one short sentence.
 
-WO #${woContext.woNumber || '?'}: ${woContext.description || ''}
-Today: ${today}
+        const alreadyCaptured = JSON.stringify({
+          completionDate: extracted.completionDate || null,
+          hours: extracted.hours ?? null,
+          collaborators: extracted.collaborators || [],
+          completionRemark: extracted.completionRemark || null,
+        });
 
-REQUIRED fields (collect all 3):
-1. completionDate — ALWAYS default to today (${today}) unless they say a different date. Never ask for date if not mentioned.
-2. hours — how long it took (number, decimals ok)
-3. completionRemark — what was found and done, cleaned up from their words
+        const systemInstruction = `You are a voice assistant helping a facility technician log a work order completion. Your replies must be ONE short sentence max.
+
+WORK ORDER CONTEXT:
+WO #${woContext.woNumber || '?'} — ${woContext.description || '(no description)'}
+Building: ${woContext.buildingCode || '?'}, Room: ${woContext.roomNumber || '?'}
+Equipment: ${woContext.equipmentRaw || '?'}
+Today's date: ${today}
+Known staff: ${staffNames.length ? staffNames.join(', ') : '(none)'}
+
+ALREADY CAPTURED (do NOT ask for these again):
+${alreadyCaptured}
+
+REQUIRED fields — collect all 3 before finishing:
+1. completionDate — default to today (${today}) unless technician said a different date
+2. hours — how long the job took (number, decimals ok; 45 min = 0.75)
+3. completionRemark — what the technician said
 
 OPTIONAL:
-- collaborators — other people who helped (empty array if not mentioned, NEVER ask for this)
+- collaborators — names of others who helped (match against known staff list; leave empty if none mentioned — NEVER ask for this)
 
-STRICT RULES — follow exactly:
-- Extract ALL fields from ONE statement. If user gives remark + hours in one go, grab both.
-- NEVER ask the user to confirm, repeat back, or verify anything.
-- NEVER say "Is that correct?" or "Let me confirm" or read back a summary.
-- completionDate always defaults to today (${today}) — only ask for date if user said a specific different date you couldn't parse.
-- If remark is missing → ask ONLY for remark. One sentence.
-- If hours is missing → ask ONLY for hours. One sentence.
-- Once all 3 required fields are captured → immediately set nextStep "done". No confirmation step.
-- "done", "submit", "that's it", "yes", "correct", "sounds good", "yep" → nextStep "done".
-- "next" or "skip" → nextStep "skip".
-- completionRemark MUST accept ANY response, even extremely simple ones. "work completed", "inspection done", "all good", "nothing found", "done", "fixed it" are ALL valid remarks — use them as-is. NEVER push back on a simple remark or ask for more detail.
-- If the user gives ANY words that could be a remark, extract it. Do not require it to be detailed.
+EXTRACTION RULES — follow exactly:
+- Extract ALL available fields from a single statement. One message can fill all 4 fields at once.
+- completionDate defaults to today — never ask for it unless technician gave a date you could not parse.
+- completionRemark: accept ANY response no matter how brief. "done", "fixed it", "all good", "nothing found" are all valid. Never push back.
+- collaborators: extract spoken names and match to known staff where possible. Unmatched names are fine as-is.
+- Once all 3 required fields are filled → set nextStep to "done" immediately. No confirmation, no summary read-back.
+- "done" / "submit" / "that's it" / "yes" / "correct" / "sounds good" / "yep" → nextStep "done".
+- "next" / "skip" → nextStep "skip".
+- NEVER ask the user to confirm, repeat back, or verify any field.
+- If only ONE field is still missing → ask for ONLY that field. One sentence.
 
-Return ONLY valid JSON on one line, no markdown:
-{"reply":"string","extracted":{"completionDate":"YYYY-MM-DD or null","hours":number_or_null,"collaborators":[],"completionRemark":"string or null"},"nextStep":"continue"}`;
+CRITICAL — OUTPUT FORMAT:
+You MUST ALWAYS return valid JSON on a single line. No markdown, no prose, no exceptions.
+{"reply":"<one sentence>","extracted":{"completionDate":"YYYY-MM-DD or null","hours":number_or_null,"collaborators":[],"completionRemark":"string or null"},"nextStep":"continue"}`;
 
-        // Build Gemini multi-turn messages
-        const contents = [
-          { role: 'user', parts: [{ text: `[System context]\n${systemInstruction}\n\n[Current extracted state]\n${JSON.stringify(extracted)}\n\n[First user message or continue below]` }] },
-          { role: 'model', parts: [{ text: '{"reply":"Got it, ready to help.","extracted":{"completionDate":null,"hours":null,"collaborators":[],"completionRemark":null},"nextStep":"continue"}' }] },
-          ...messages,
+        // contents = actual conversation only (strictly alternating user/model).
+        // The system instruction is passed via systemInstruction field — not as a fake user turn.
+        const contents = messages.length > 0 ? messages : [
+          { role: 'user', parts: [{ text: '(session start)' }] },
         ];
 
         const geminiResp = await fetch(
@@ -1955,8 +1993,11 @@ Return ONLY valid JSON on one line, no markdown:
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemInstruction }] },
               contents,
-              generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
+              // 300 tokens is too low for JSON that includes a full completion remark.
+              // When truncated, JSON.parse fails and the UI never receives extracted fields.
+              generationConfig: { temperature: 0.2},
             }),
           }
         );
@@ -1967,23 +2008,24 @@ Return ONLY valid JSON on one line, no markdown:
         }
 
         const geminiData = await geminiResp.json();
-        const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim()
-          .replace(/^```json\s*/i, '').replace(/```$/,'').trim();
+        const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+        const parsed = parseSingleLineJsonObject(rawText);
 
-        try {
-          const parsed = JSON.parse(rawText);
+        if (parsed && typeof parsed === 'object') {
           return Response.json({
             reply: parsed.reply || 'Could you repeat that?',
             extracted: { completionDate: null, hours: null, collaborators: [], completionRemark: null, ...(parsed.extracted || {}) },
             nextStep: parsed.nextStep || 'continue',
           }, { headers: corsHeaders });
-        } catch {
-          return Response.json({
-            reply: rawText || 'Sorry, could you repeat that?',
-            extracted,
-            nextStep: 'continue',
-          }, { headers: corsHeaders });
         }
+
+        // If Gemini returned truncated/invalid JSON, do not destroy the session.
+        // Return the raw reply text (best-effort) but preserve existing extracted values.
+        return Response.json({
+          reply: rawText || 'Sorry, could you repeat that?',
+          extracted,
+          nextStep: 'continue',
+        }, { headers: corsHeaders });
       }
 
       // --- MARK WORK ORDER COMPLETE (mechanic) ---
