@@ -168,6 +168,8 @@ function FieldCard({
   );
 }
 
+type EditField = 'date' | 'hours' | 'with' | 'remark' | null;
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const CompletionChat: React.FC<Props> = ({
@@ -193,8 +195,17 @@ export const CompletionChat: React.FC<Props> = ({
   const [allTranscript, setAllTranscript] = useState('');
   const [liveRawTranscript, setLiveRawTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const pendingExtracted = useRef<Extracted | null>(null);
+  const [editField, setEditField] = useState<EditField>(null);
+  const [remarkDraft, setRemarkDraft] = useState<string>('');
+  const [hoursDraft, setHoursDraft] = useState<string>('');
+  const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
+  const [staffFilter, setStaffFilter] = useState('');
+  const [manualLock, setManualLock] = useState({
+    completionDate: false,
+    hours: false,
+    collaborators: false,
+    completionRemark: false,
+  });
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -204,19 +215,14 @@ export const CompletionChat: React.FC<Props> = ({
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, liveRawTranscript, isRecording]);
 
-  // ── Countdown auto-submit ──
-  useEffect(() => {
-    if (countdown === null) return;
-    if (countdown === 0) {
-      setCountdown(null);
-      const ext = pendingExtracted.current;
-      if (ext) handleSubmit(ext);
-      return;
-    }
-    const t = setTimeout(() => setCountdown(c => c !== null ? c - 1 : null), 1000);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countdown]);
+  const toggleStaffId = useCallback((id: string) => {
+    setSelectedStaffIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // ── Send a turn to AI and get response ──
   const sendToAI = useCallback(async (userText: string) => {
@@ -245,15 +251,15 @@ export const CompletionChat: React.FC<Props> = ({
         todayDate: today,
       });
 
-      const newCollaborators = result.extracted.collaborators?.length
+      const newCollaborators = !manualLock.collaborators && result.extracted.collaborators?.length
         ? result.extracted.collaborators
         : extracted.collaborators;
       const merged: Extracted = {
-        completionDate: result.extracted.completionDate ?? extracted.completionDate,
-        hours: result.extracted.hours ?? extracted.hours,
+        completionDate: manualLock.completionDate ? extracted.completionDate : (result.extracted.completionDate ?? extracted.completionDate),
+        hours: manualLock.hours ? extracted.hours : (result.extracted.hours ?? extracted.hours),
         collaborators: newCollaborators,
         collaboratorMatches: matchCollaborators(newCollaborators, activeStaffList),
-        completionRemark: result.extracted.completionRemark ?? extracted.completionRemark,
+        completionRemark: manualLock.completionRemark ? extracted.completionRemark : (result.extracted.completionRemark ?? extracted.completionRemark),
       };
       setExtracted(merged);
 
@@ -272,11 +278,10 @@ export const CompletionChat: React.FC<Props> = ({
       }
 
       if (result.nextStep === 'done') {
-        pendingExtracted.current = merged;
+        // No auto-submit — just speak and return to idle so the user can review/edit then submit.
         setPhase('speaking');
         speak(replyText, () => {
-          setPhase('done');
-          setCountdown(3);
+          setPhase('idle');
         }, muted);
         return;
       }
@@ -289,7 +294,7 @@ export const CompletionChat: React.FC<Props> = ({
       setError(e.message);
       setPhase('idle');
     }
-  }, [extracted, wo, activeStaffList, today, muted, onSkip]);
+  }, [extracted, wo, activeStaffList, today, muted, onSkip, manualLock]);
 
   // ── Opening greeting on mount ──
   useEffect(() => {
@@ -311,7 +316,7 @@ export const CompletionChat: React.FC<Props> = ({
   // ── Submit completion ──
   const handleSubmit = async (ext: Extracted = extracted) => {
     const date = ext.completionDate || today;
-    const remark = ext.completionRemark || '';
+    let remark = ext.completionRemark || '';
     if (!remark) {
       sendToAI('(user attempted submit without completion remark — please ask for it)');
       return;
@@ -319,6 +324,19 @@ export const CompletionChat: React.FC<Props> = ({
     setSubmitting(true);
     setPhase('done');
     try {
+      // Final-stage cleanup only (keeps the interactive chat fast).
+      // Uses WO context to correct HVAC abbreviations/equipment naming where possible.
+      try {
+        const cleaned = await api.cleanTranscript(remark, {
+          equipmentName: wo.equipmentRaw ?? undefined,
+          buildingCode: wo.buildingCode ?? undefined,
+          roomNumber: wo.roomNumber ?? undefined,
+        });
+        remark = cleaned.cleaned || remark;
+      } catch {
+        // Non-blocking: submit the remark as-is if cleanup fails.
+      }
+
       await onComplete({
         completionDate: date,
         hours: ext.hours,
@@ -363,6 +381,16 @@ export const CompletionChat: React.FC<Props> = ({
     sendToAI(cleaned);
   }, [sendToAI]);
 
+  // Keep edit drafts in sync with extracted values when opening editors.
+  useEffect(() => {
+    if (editField === 'remark') setRemarkDraft(extracted.completionRemark || '');
+    if (editField === 'hours') setHoursDraft(extracted.hours !== null ? String(extracted.hours) : '');
+    if (editField === 'with') {
+      setSelectedStaffIds(new Set(extracted.collaboratorMatches.map(m => m.staffId)));
+      setStaffFilter('');
+    }
+  }, [editField, extracted]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
       <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col h-[100dvh] max-h-[100dvh] sm:h-[90vh] sm:max-h-[720px]">
@@ -406,21 +434,32 @@ export const CompletionChat: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* ── Extracted fields strip ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-5 py-3 border-b border-slate-100 shrink-0">
-          <FieldCard icon={Calendar} label="Date" value={fmtDate(extracted.completionDate)}
-            colour="bg-blue-50 border-blue-200 text-blue-700" />
-          <FieldCard icon={Clock} label="Hours" value={extracted.hours !== null ? `${extracted.hours}h` : null}
-            colour="bg-emerald-50 border-emerald-200 text-emerald-700" />
-          <FieldCard icon={Users} label="With"
-            value={extracted.collaboratorMatches.length ? extracted.collaboratorMatches.map(m => m.resolvedName).join(', ') : null}
-            colour="bg-violet-50 border-violet-200 text-violet-700" />
-          <FieldCard icon={FileText} label="Remark"
-            value={extracted.completionRemark}
-            colour="bg-amber-50 border-amber-200 text-amber-700" />
+        {/* ── Extracted fields strip (fixed height — editors overlay chat below) ── */}
+        <div className="px-5 py-3 border-b border-slate-100 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <button type="button" className="text-left" onClick={() => setEditField(f => f === 'date' ? null : 'date')}>
+              <FieldCard icon={Calendar} label="Date" value={fmtDate(extracted.completionDate)}
+                colour="bg-blue-50 border-blue-200 text-blue-700" />
+            </button>
+            <button type="button" className="text-left" onClick={() => setEditField(f => f === 'hours' ? null : 'hours')}>
+              <FieldCard icon={Clock} label="Hours" value={extracted.hours !== null ? `${extracted.hours}h` : null}
+                colour="bg-emerald-50 border-emerald-200 text-emerald-700" />
+            </button>
+            <button type="button" className="text-left" onClick={() => setEditField(f => f === 'with' ? null : 'with')}>
+              <FieldCard icon={Users} label="With"
+                value={extracted.collaboratorMatches.length ? extracted.collaboratorMatches.map(m => m.resolvedName).join(', ') : null}
+                colour="bg-violet-50 border-violet-200 text-violet-700" />
+            </button>
+            <button type="button" className="text-left" onClick={() => setEditField(f => f === 'remark' ? null : 'remark')}>
+              <FieldCard icon={FileText} label="Remark"
+                value={extracted.completionRemark}
+                colour="bg-amber-50 border-amber-200 text-amber-700" />
+            </button>
+          </div>
         </div>
 
-        {/* ── Chat messages ── */}
+        {/* ── Chat messages + field editor overlay (overlay sits on top of chat, does not expand header) ── */}
+        <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -465,24 +504,12 @@ export const CompletionChat: React.FC<Props> = ({
           <div ref={chatEndRef} />
         </div>
 
-        {/* ── Bottom controls ── */}
+        {/* ── Bottom controls (field editor overlay covers this + chat above) ── */}
         <div className="shrink-0 border-t border-slate-100 px-4 sm:px-5 pt-3 pb-4 space-y-3" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
 
           {/* Status line */}
           <div className="flex items-center justify-center gap-2 h-5">
-            {countdown !== null ? (
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-emerald-600">
-                  Submitting in {countdown}…
-                </span>
-                <button
-                  onClick={() => { setCountdown(null); pendingExtracted.current = null; setPhase('idle'); }}
-                  className="text-xs text-slate-400 hover:text-red-500 underline underline-offset-2 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : phase === 'thinking' ? (
+            {phase === 'thinking' ? (
               <span className="flex items-center gap-1.5 text-xs text-slate-400">
                 <Loader2 size={12} className="animate-spin" /> Thinking…
               </span>
@@ -529,7 +556,7 @@ export const CompletionChat: React.FC<Props> = ({
                 <div className="flex justify-center">
                   <PushToTalkMic
                     size="lg"
-                    autoClean
+                    autoClean={false}
                     onTranscript={handleVoiceTranscript}
                     onLiveTranscript={setLiveRawTranscript}
                     onRecordStart={() => { setIsRecording(true); setLiveRawTranscript(''); }}
@@ -634,6 +661,229 @@ export const CompletionChat: React.FC<Props> = ({
               <RotateCcw size={10} /> Reset
             </button>
           </div>
+        </div>
+
+        {editField && (
+          <div
+            className="absolute inset-0 z-10 flex flex-col bg-white/92 backdrop-blur-sm border-t border-slate-200/90 shadow-[0_-10px_40px_rgba(15,23,42,0.12)]"
+            aria-modal="true"
+            role="dialog"
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3">
+                {editField === 'date' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">Edit date</p>
+                      <button type="button" className="text-xs text-slate-400 hover:text-slate-600 underline" onClick={() => setEditField(null)}>
+                        Done
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100"
+                        onClick={() => {
+                          setManualLock(l => ({ ...l, completionDate: true }));
+                          setExtracted(e => ({ ...e, completionDate: today }));
+                        }}
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100"
+                        onClick={() => {
+                          setManualLock(l => ({ ...l, completionDate: true }));
+                          const y = new Date();
+                          y.setDate(y.getDate() - 1);
+                          const iso = y.toISOString().slice(0, 10);
+                          setExtracted(e => ({ ...e, completionDate: iso }));
+                        }}
+                      >
+                        Yesterday
+                      </button>
+                      <label className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100 cursor-pointer">
+                        Pick…
+                        <input
+                          type="date"
+                          className="ml-2 bg-transparent"
+                          value={extracted.completionDate || ''}
+                          onChange={(ev) => {
+                            setManualLock(l => ({ ...l, completionDate: true }));
+                            setExtracted(e => ({ ...e, completionDate: ev.target.value || null }));
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100"
+                        onClick={() => {
+                          setManualLock(l => ({ ...l, completionDate: true }));
+                          setExtracted(e => ({ ...e, completionDate: null }));
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {editField === 'hours' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">Edit hours</p>
+                      <button type="button" className="text-xs text-slate-400 hover:text-slate-600 underline" onClick={() => setEditField(null)}>
+                        Done
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {[0.5, 1, 2, 3, 4, 5, 8].map(h => (
+                        <button
+                          key={h}
+                          type="button"
+                          className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100"
+                          onClick={() => {
+                            setManualLock(l => ({ ...l, hours: true }));
+                            setExtracted(e => ({ ...e, hours: h }));
+                          }}
+                        >
+                          {h}h
+                        </button>
+                      ))}
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200">
+                        <input
+                          inputMode="decimal"
+                          value={hoursDraft}
+                          onChange={e => setHoursDraft(e.target.value)}
+                          placeholder="e.g. 1.5"
+                          className="w-20 text-sm bg-transparent focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold"
+                          onClick={() => {
+                            const n = Number(hoursDraft);
+                            if (!Number.isFinite(n)) return;
+                            setManualLock(l => ({ ...l, hours: true }));
+                            setExtracted(e => ({ ...e, hours: n }));
+                          }}
+                        >
+                          Set
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100"
+                        onClick={() => {
+                          setManualLock(l => ({ ...l, hours: true }));
+                          setExtracted(e => ({ ...e, hours: null }));
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {editField === 'with' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">Edit collaborators</p>
+                      <button type="button" className="text-xs text-slate-400 hover:text-slate-600 underline" onClick={() => setEditField(null)}>
+                        Done
+                      </button>
+                    </div>
+                    <input
+                      value={staffFilter}
+                      onChange={e => setStaffFilter(e.target.value)}
+                      placeholder="Search staff…"
+                      className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <div className="max-h-44 overflow-auto rounded-xl border border-slate-200 bg-white">
+                      {activeStaffList
+                        .filter(s => !staffFilter.trim() || s.name.toLowerCase().includes(staffFilter.trim().toLowerCase()))
+                        .map(s => (
+                          <label key={s.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedStaffIds.has(s.id)}
+                              onChange={() => toggleStaffId(s.id)}
+                            />
+                            <span className="text-slate-700">{s.name}</span>
+                          </label>
+                        ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100"
+                        onClick={() => setSelectedStaffIds(new Set())}
+                      >
+                        Clear selection
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+                        onClick={() => {
+                          setManualLock(l => ({ ...l, collaborators: true }));
+                          const matches = activeStaffList
+                            .filter(s => selectedStaffIds.has(s.id))
+                            .map(s => ({ spokenName: s.name, resolvedName: s.name, staffId: s.id }));
+                          setExtracted(e => ({
+                            ...e,
+                            collaboratorMatches: matches,
+                            collaborators: matches.map(m => m.resolvedName),
+                          }));
+                          setEditField(null);
+                        }}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {editField === 'remark' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">Edit remark</p>
+                      <button type="button" className="text-xs text-slate-400 hover:text-slate-600 underline" onClick={() => setEditField(null)}>
+                        Done
+                      </button>
+                    </div>
+                    <textarea
+                      value={remarkDraft}
+                      onChange={e => setRemarkDraft(e.target.value)}
+                      rows={4}
+                      className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm hover:bg-slate-100"
+                        onClick={() => setRemarkDraft('')}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+                        onClick={() => {
+                          setManualLock(l => ({ ...l, completionRemark: true }));
+                          setExtracted(e => ({ ...e, completionRemark: remarkDraft.trim() || null }));
+                          setEditField(null);
+                        }}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>
