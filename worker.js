@@ -49,6 +49,88 @@ function parseSingleLineJsonObject(rawText) {
   return null;
 }
 
+function looksLikeTruncatedJson(text) {
+  if (!text || typeof text !== 'string') return false;
+  const t = text.trim();
+  // Common truncation patterns: starts with "{" but doesn't end with "}" or ends mid-string.
+  if (t.startsWith('{') && !t.endsWith('}')) return true;
+  if (t.includes('"reply"') && !t.endsWith('}')) return true;
+  return false;
+}
+
+function isoDateOnly(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function addDaysIso(isoDate, deltaDays) {
+  // isoDate is YYYY-MM-DD
+  const [y, m, d] = String(isoDate || '').split('-').map(n => Number(n));
+  if (!y || !m || !d) return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(dt.getTime())) return null;
+  dt.setUTCDate(dt.getUTCDate() + deltaDays);
+  return isoDateOnly(dt);
+}
+
+function parseCompletionDateFromText(text, todayIso) {
+  const t = String(text || '').trim();
+  if (!t) return { date: null, reason: 'empty' };
+
+  const lower = t.toLowerCase();
+
+  // Relative terms (most common, fastest)
+  if (/\btoday\b/.test(lower)) return { date: todayIso, reason: 'relative:today' };
+  if (/\byesterday\b/.test(lower)) return { date: addDaysIso(todayIso, -1), reason: 'relative:yesterday' };
+  if (/\blast\s+night\b/.test(lower)) return { date: addDaysIso(todayIso, -1), reason: 'relative:lastNight' };
+  if (/\btonight\b/.test(lower)) return { date: todayIso, reason: 'relative:tonight' };
+  if (/\bthis\s+morning\b/.test(lower)) return { date: todayIso, reason: 'relative:thisMorning' };
+
+  // Explicit ISO YYYY-MM-DD
+  const iso = t.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  if (iso) return { date: `${iso[1]}-${iso[2]}-${iso[3]}`, reason: 'explicit:iso' };
+
+  // Explicit spaced/slashed YYYY MM DD / YYYY/MM/DD / YYYY.MM.DD
+  const ymd = t.match(/\b(20\d{2})[\/\.\s](\d{2})[\/\.\s](\d{2})\b/);
+  if (ymd) return { date: `${ymd[1]}-${ymd[2]}-${ymd[3]}`, reason: 'explicit:ymd' };
+
+  // Month name formats: "March 6", "Mar 6th", optional year.
+  const monthMap = {
+    jan: 1, january: 1,
+    feb: 2, february: 2,
+    mar: 3, march: 3,
+    apr: 4, april: 4,
+    may: 5,
+    jun: 6, june: 6,
+    jul: 7, july: 7,
+    aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9,
+    oct: 10, october: 10,
+    nov: 11, november: 11,
+    dec: 12, december: 12,
+  };
+  const mon = lower.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/);
+  if (mon) {
+    const mm = monthMap[mon[1]];
+    // Look for day number near the month name (e.g. "March 6th")
+    const dayMatch = lower.match(new RegExp(`${mon[1]}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`));
+    if (dayMatch) {
+      const dd = Number(dayMatch[1]);
+      const yearMatch = lower.match(/\b(20\d{2})\b/);
+      const yyyy = yearMatch ? Number(yearMatch[1]) : Number(String(todayIso).slice(0, 4));
+      if (yyyy && mm && dd) {
+        const dt = new Date(Date.UTC(yyyy, mm - 1, dd));
+        // Validate (catches impossible dates like Feb 29 in non-leap years)
+        if (dt.getUTCFullYear() === yyyy && (dt.getUTCMonth() + 1) === mm && dt.getUTCDate() === dd) {
+          return { date: isoDateOnly(dt), reason: 'explicit:monthName' };
+        }
+        return { date: null, reason: 'explicit:invalidDate' };
+      }
+    }
+  }
+
+  return { date: null, reason: 'noDateDetected' };
+}
+
 // ISO timestamp in UTC (sortable as TEXT)
 function isoNow() {
   return new Date().toISOString();
@@ -1827,13 +1909,19 @@ Return ONLY valid JSON (no markdown, no code blocks):
         const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
         let cleaned = rawTranscript;
         let summary = '';
-        try {
-          const parsed = JSON.parse(rawText);
+        const parsed = parseSingleLineJsonObject(rawText);
+        if (parsed && typeof parsed === 'object') {
           cleaned = parsed.cleaned || rawTranscript;
           summary = parsed.summary || '';
-        } catch {
-          // Gemini returned non-JSON — use raw text as cleaned
-          cleaned = rawText || rawTranscript;
+        } else {
+          // Never return fenced JSON blobs as "cleaned" — fall back to the raw transcript.
+          // (If Gemini violated the contract, better to keep user-friendly text than pollute downstream completion chat.)
+          cleaned = rawTranscript;
+          summary = '';
+          console.warn('[clean-transcript] non-JSON model output', {
+            len: rawText?.length || 0,
+            head: String(rawText || '').slice(0, 140),
+          });
         }
 
         // Fire-and-forget: log raw→cleaned pair to D1 for future analysis
@@ -1936,14 +2024,33 @@ Return ONLY valid JSON, no markdown:
           return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 503, headers: corsHeaders });
         }
         const { messages = [], extracted = {}, woContext = {}, staffNames = [], todayDate } = body;
+        const debugId = (crypto?.randomUUID?.() || `dbg_${Date.now()}_${Math.random().toString(16).slice(2)}`);
 
         const today = todayDate || new Date().toISOString().slice(0, 10);
 
+        // Deterministic completionDate inference to prevent the model from repeatedly
+        // asking for a date when "yesterday/today" was said, or when no date was said.
+        const lastUserText = (() => {
+          for (let i = (messages?.length || 0) - 1; i >= 0; i--) {
+            if (messages[i]?.role === 'user') return messages[i]?.parts?.[0]?.text || '';
+          }
+          return messages?.[messages?.length - 1]?.parts?.[0]?.text || '';
+        })();
+
+        const inferred = parseCompletionDateFromText(lastUserText, today);
+        const shouldDefaultToToday = inferred.reason === 'noDateDetected';
+        const deterministicCompletionDate = inferred.date || (shouldDefaultToToday ? today : null);
+
+        const mergedExtracted = {
+          ...extracted,
+          completionDate: extracted.completionDate || deterministicCompletionDate || null,
+        };
+
         const alreadyCaptured = JSON.stringify({
-          completionDate: extracted.completionDate || null,
-          hours: extracted.hours ?? null,
-          collaborators: extracted.collaborators || [],
-          completionRemark: extracted.completionRemark || null,
+          completionDate: mergedExtracted.completionDate || null,
+          hours: mergedExtracted.hours ?? null,
+          collaborators: mergedExtracted.collaborators || [],
+          completionRemark: mergedExtracted.completionRemark || null,
         });
 
         const systemInstruction = `You are a voice assistant helping a facility technician log a work order completion. Your replies must be ONE short sentence max.
@@ -1987,44 +2094,89 @@ You MUST ALWAYS return valid JSON on a single line. No markdown, no prose, no ex
           { role: 'user', parts: [{ text: '(session start)' }] },
         ];
 
-        const geminiResp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: systemInstruction }] },
-              contents,
-              // 300 tokens is too low for JSON that includes a full completion remark.
-              // When truncated, JSON.parse fails and the UI never receives extracted fields.
-              generationConfig: { temperature: 0.2},
-            }),
+        const callGemini = async (maxOutputTokens) => {
+          const resp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                contents,
+                // Output must always be single-line JSON; too-low token limits cause truncation and broken parsing.
+                generationConfig: { temperature: 0.2, maxOutputTokens },
+              }),
+            }
+          );
+          if (!resp.ok) {
+            const errText = await resp.text();
+            return { ok: false, errText, data: null };
           }
-        );
+          const data = await resp.json();
+          return { ok: true, errText: null, data };
+        };
 
-        if (!geminiResp.ok) {
-          const errText = await geminiResp.text();
-          return Response.json({ error: `Gemini error: ${errText}` }, { status: 502, headers: corsHeaders });
+        // First attempt (fast/cheap, but must be high enough to include completionRemark).
+        let attempt = 1;
+        let geminiResult = await callGemini(900);
+
+        if (!geminiResult.ok) {
+          return Response.json({ error: `Gemini error: ${geminiResult.errText}` }, { status: 502, headers: corsHeaders });
         }
 
-        const geminiData = await geminiResp.json();
-        const rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-        const parsed = parseSingleLineJsonObject(rawText);
+        let geminiData = geminiResult.data;
+        let rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+        let parsed = parseSingleLineJsonObject(rawText);
+
+        // If we got invalid/truncated JSON, retry once with a larger token budget.
+        if (!parsed && looksLikeTruncatedJson(rawText)) {
+          attempt = 2;
+          const retry = await callGemini(1400);
+          if (retry.ok) {
+            geminiData = retry.data;
+            rawText = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+            parsed = parseSingleLineJsonObject(rawText);
+          }
+        }
 
         if (parsed && typeof parsed === 'object') {
+          console.log('[completion-chat] ok', {
+            debugId,
+            attempt,
+            finishReason: geminiData?.candidates?.[0]?.finishReason,
+            outLen: rawText?.length || 0,
+            hasExtracted: !!parsed.extracted,
+            dateInference: inferred.reason,
+            defaultedToToday: shouldDefaultToToday,
+          });
           return Response.json({
             reply: parsed.reply || 'Could you repeat that?',
-            extracted: { completionDate: null, hours: null, collaborators: [], completionRemark: null, ...(parsed.extracted || {}) },
+            extracted: {
+              completionDate: mergedExtracted.completionDate || null,
+              hours: mergedExtracted.hours ?? null,
+              collaborators: mergedExtracted.collaborators || [],
+              completionRemark: mergedExtracted.completionRemark || null,
+              ...(parsed.extracted || {}),
+            },
             nextStep: parsed.nextStep || 'continue',
+            debugId,
           }, { headers: corsHeaders });
         }
 
         // If Gemini returned truncated/invalid JSON, do not destroy the session.
         // Return the raw reply text (best-effort) but preserve existing extracted values.
+        console.warn('[completion-chat] invalid JSON from model', {
+          debugId,
+          attempt,
+          finishReason: geminiData?.candidates?.[0]?.finishReason,
+          outLen: rawText?.length || 0,
+          head: String(rawText || '').slice(0, 160),
+        });
         return Response.json({
           reply: rawText || 'Sorry, could you repeat that?',
-          extracted,
+          extracted: mergedExtracted,
           nextStep: 'continue',
+          debugId,
         }, { headers: corsHeaders });
       }
 
