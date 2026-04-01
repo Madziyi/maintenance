@@ -131,6 +131,25 @@ function parseCompletionDateFromText(text, todayIso) {
   return { date: null, reason: 'noDateDetected' };
 }
 
+function isoDateInTimeZone(timeZone, fallbackIso) {
+  try {
+    if (!timeZone) return fallbackIso;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const y = parts.find(p => p.type === 'year')?.value;
+    const m = parts.find(p => p.type === 'month')?.value;
+    const d = parts.find(p => p.type === 'day')?.value;
+    if (!y || !m || !d) return fallbackIso;
+    return `${y}-${m}-${d}`;
+  } catch {
+    return fallbackIso;
+  }
+}
+
 // ISO timestamp in UTC (sortable as TEXT)
 function isoNow() {
   return new Date().toISOString();
@@ -2023,10 +2042,11 @@ Return ONLY valid JSON, no markdown:
         if (!env.GEMINI_API_KEY) {
           return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 503, headers: corsHeaders });
         }
-        const { messages = [], extracted = {}, woContext = {}, staffNames = [], todayDate } = body;
+        const { messages = [], extracted = {}, woContext = {}, staffNames = [], todayDate, userTimeZone } = body;
         const debugId = (crypto?.randomUUID?.() || `dbg_${Date.now()}_${Math.random().toString(16).slice(2)}`);
 
-        const today = todayDate || new Date().toISOString().slice(0, 10);
+        const fallbackToday = todayDate || new Date().toISOString().slice(0, 10);
+        const today = isoDateInTimeZone(userTimeZone, fallbackToday);
 
         // Deterministic completionDate inference to prevent the model from repeatedly
         // asking for a date when "yesterday/today" was said, or when no date was said.
@@ -2148,6 +2168,8 @@ You MUST ALWAYS return valid JSON on a single line. No markdown, no prose, no ex
             hasExtracted: !!parsed.extracted,
             dateInference: inferred.reason,
             defaultedToToday: shouldDefaultToToday,
+            userTimeZone: userTimeZone || 'none',
+            resolvedToday: today,
           });
           return Response.json({
             reply: parsed.reply || 'Could you repeat that?',

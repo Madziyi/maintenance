@@ -175,7 +175,15 @@ type EditField = 'date' | 'hours' | 'with' | 'remark' | null;
 export const CompletionChat: React.FC<Props> = ({
   wo, staffList, onComplete, onClose, endOfDayMode = false, onSkip, onPassOn,
 }) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const userTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    []
+  );
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const geminiHistory = useRef<{ role: 'user' | 'model'; parts: { text: string }[] }[]>([]);
@@ -249,6 +257,7 @@ export const CompletionChat: React.FC<Props> = ({
         },
         staffNames: activeStaffList.map(s => s.name),
         todayDate: today,
+        userTimeZone,
       });
 
       const newCollaborators = !manualLock.collaborators && result.extracted.collaborators?.length
@@ -294,7 +303,7 @@ export const CompletionChat: React.FC<Props> = ({
       setError(e.message);
       setPhase('idle');
     }
-  }, [extracted, wo, activeStaffList, today, muted, onSkip, manualLock]);
+  }, [extracted, wo, activeStaffList, today, userTimeZone, muted, onSkip, manualLock]);
 
   // ── Opening greeting on mount ──
   useEffect(() => {

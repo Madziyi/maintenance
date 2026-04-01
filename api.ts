@@ -540,6 +540,7 @@ export const api = {
     woContext: { woNumber: string; description: string | null; buildingCode: string | null; roomNumber: string | null; equipmentRaw: string | null };
     staffNames: string[];
     todayDate: string;
+    userTimeZone?: string;
   }): Promise<{
     reply: string;
     extracted: { completionDate: string | null; hours: number | null; collaborators: string[]; completionRemark: string | null };
