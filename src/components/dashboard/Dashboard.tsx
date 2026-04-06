@@ -1,12 +1,11 @@
 import React, { useMemo } from 'react';
-import { Building as BuildingIcon, Wrench, MapPin, Image as ImageIcon, ClipboardList } from 'lucide-react';
+import { Building as BuildingIcon, Wrench, MapPin, Image as ImageIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { BuildingData } from '../../../types';
 
 interface DashboardProps {
   data: BuildingData[];
   isAuthenticated: boolean;
-  onViewWorkOrders: () => void;
   onViewEquipment: () => void;
   onViewBuildings: () => void;
 }
@@ -14,7 +13,6 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({
   data,
   isAuthenticated,
-  onViewWorkOrders,
   onViewEquipment,
   onViewBuildings,
 }) => {
@@ -51,13 +49,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <p className="text-slate-500 text-sm mt-2">Welcome to WayFinder Dashboard</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={onViewWorkOrders}
-              className="px-5 h-10 rounded-full bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors duration-200 flex items-center gap-2 shadow-soft"
-            >
-              <ClipboardList size={16} />
-              <span>View Work Orders</span>
-            </button>
           <button
             onClick={onViewEquipment}
             className="px-5 h-10 rounded-full bg-white border border-slate-200/80 text-slate-700 text-sm font-medium hover:bg-slate-50 hover:border-slate-300 hover:shadow-soft transition-all duration-200 whitespace-nowrap ring-1 ring-slate-900/5"

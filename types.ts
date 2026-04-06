@@ -61,10 +61,6 @@ export interface BuildingData {
   buildingImage?: string; // Base64 string of building exterior
 }
 
-// ─────────────────────────────────────────────
-// Work Order types
-// ─────────────────────────────────────────────
-
 export type StaffCategory = 'Operators' | 'Maintenance' | 'Assistants' | 'Refrigeration';
 
 export interface Staff {
@@ -76,116 +72,6 @@ export interface Staff {
   active: boolean;
   hasPin: boolean;
   createdAt: string;
-}
-
-export interface WorkOrderHandoff {
-  id: string;
-  workOrderId: string;
-  workOrderNumber: string;
-  requestDescription: string | null;
-  buildingCode: string | null;
-  roomNumber: string | null;
-  currentAssigneeName: string | null;
-  currentAssigneeId: string | null;
-  fromStaffId: string | null;
-  fromStaffName: string | null;
-  reason: string | null;
-  handoffNote: string | null;
-  createdAt: string;
-}
-
-export interface WorkOrderTechnician {
-  id: string;
-  workOrderId: string;
-  employeeNumber: string | null;
-  staffId: string | null;
-  craft: string | null;
-  hours: number | null;
-  rate: number | null;
-  totalCost: number | null;
-}
-
-export interface WorkOrderAnnotation {
-  id: string;
-  workOrderId: string;
-  staffId: string | null;
-  authorName: string;
-  text: string;
-  createdAt: string;
-}
-
-export interface WorkOrder {
-  id: string;
-  workOrderNumber: string;
-  buildingCode: string | null;
-  buildingName: string | null;
-  roomNumber: string | null;
-  equipmentId: string | null;
-  equipmentRaw: string | null;
-  requester: string | null;
-  requestDescription: string | null;
-  status: string | null;
-  priority: string | null;
-  craft: string | null;
-  openDate: string | null;
-  completeDate: string | null;
-  actualHours: number;
-  actualLabourCost: number;
-  actualTotalCost: number;
-  technicianNotes: string | null;
-  completionRemark: string | null;
-  pdfUrl: string | null;
-  pageNumber: number;
-  pageCount: number;
-  source: 'pdf' | 'manual';
-  // Mechanic completion fields (set when mechanic marks WO complete)
-  completedAt: string | null;
-  completionHours: number | null;
-  completedByStaffIds: string[] | null; // parsed from JSON
-  completedByNames: string | null;      // "Nick, Griff" for display
-  rawTranscript: string | null;         // raw Web Speech API output
-  assignedToStaffId: string | null;
-  assignedToName: string | null;
-  completionImageUrl: string | null;
-  handoffPending: boolean;
-  createdAt: string;
-  updatedAt: string;
-  // Populated by detail endpoint only
-  technicians?: WorkOrderTechnician[];
-  annotations?: WorkOrderAnnotation[];
-}
-
-/** Intermediate type used in the upload wizard before a WO is saved */
-export interface ParsedWorkOrder {
-  workOrderNumber: string;
-  buildingCode: string | null;
-  buildingName: string | null;
-  roomNumber: string | null;
-  equipmentId: string | null;
-  equipmentRaw: string | null;
-  requester: string | null;
-  requestDescription: string | null;
-  status: string | null;
-  priority: string | null;
-  craft: string | null;
-  openDate: string | null;
-  completeDate: string | null;
-  actualHours: number;
-  actualLabourCost: number;
-  actualTotalCost: number;
-  technicianNotes: string | null;
-  completionRemark: string | null;
-  technicians: Array<{
-    employeeNumber: string;
-    craft: string | null;
-    hours: number | null;
-    rate: number | null;
-    totalCost: number | null;
-  }>;
-  pageNumber: number;
-  pageCount: number;
-  sourceFile: string;      // original filename for display in review table
-  parseWarnings: string[]; // field names that failed to parse
 }
 
 export enum ViewState {

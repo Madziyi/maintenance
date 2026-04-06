@@ -16,6 +16,7 @@ describe('API Functions', () => {
     vi.resetAllMocks();
     // Mock the environment variable
     vi.stubEnv('VITE_API_URL', mockApiUrl);
+    vi.stubEnv('VITE_WRITE_SECRET', '');
     // Dynamically import API after env is set
     const apiModule = await import('../../api');
     api = apiModule.api;
@@ -311,79 +312,6 @@ describe('API Functions', () => {
     });
   });
 
-  describe('submitWorkOrderCompletion', () => {
-    it('should submit completion with expected payload shape', async () => {
-      const mockResponse = {
-        id: '123',
-        workOrderNumber: 'WO-1',
-        buildingCode: null,
-        buildingName: null,
-        roomNumber: null,
-        equipmentId: null,
-        equipmentRaw: null,
-        requester: null,
-        requestDescription: null,
-        status: 'PENDING_REVIEW',
-        priority: null,
-        craft: null,
-        openDate: null,
-        completeDate: null,
-        actualHours: 0,
-        actualLabourCost: 0,
-        actualTotalCost: 0,
-        technicianNotes: null,
-        completionRemark: 'Fixed issue',
-        pdfUrl: null,
-        pageNumber: 1,
-        pageCount: 1,
-        source: 'pdf',
-        completedAt: '2026-03-24',
-        completionHours: 1.5,
-        completedByStaffIds: ['1'],
-        completedByNames: 'Alex',
-        rawTranscript: 'raw words',
-        assignedToStaffId: null,
-        assignedToName: null,
-        completionImageUrl: null,
-        handoffPending: false,
-        createdAt: '2026-03-24T00:00:00.000Z',
-        updatedAt: '2026-03-24T00:00:00.000Z',
-      };
-
-      (fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      });
-
-      await api.submitWorkOrderCompletion('123', {
-        staffIds: ['1'],
-        staffNames: ['Alex'],
-        completedAt: '2026-03-24',
-        completionHours: 1.5,
-        rawTranscript: 'raw words',
-        technicianNotes: '',
-        completionRemark: 'Fixed issue',
-      });
-
-      expect(fetch).toHaveBeenCalledWith(
-        `${mockApiUrl}/api/work-orders/123/complete`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({
-            staffIds: ['1'],
-            staffNames: ['Alex'],
-            completedAt: '2026-03-24',
-            completionHours: 1.5,
-            rawTranscript: 'raw words',
-            technicianNotes: '',
-            completionRemark: 'Fixed issue',
-          }),
-        })
-      );
-    });
-  });
-
   describe('deleteEquipment', () => {
     it('should delete equipment successfully', async () => {
       (fetch as any).mockResolvedValueOnce({
@@ -393,7 +321,7 @@ describe('API Functions', () => {
       await api.deleteEquipment('EQ-1');
       expect(fetch).toHaveBeenCalledWith(
         `${mockApiUrl}/api/equipment/EQ-1`,
-        { method: 'DELETE' }
+        expect.objectContaining({ method: 'DELETE' })
       );
     });
 
@@ -417,7 +345,7 @@ describe('API Functions', () => {
       await api.deleteRoom('BIO-101');
       expect(fetch).toHaveBeenCalledWith(
         `${mockApiUrl}/api/rooms/BIO-101`,
-        { method: 'DELETE' }
+        expect.objectContaining({ method: 'DELETE' })
       );
     });
 

@@ -67,11 +67,6 @@ import { RoomDetail } from './src/components/rooms/RoomDetail';
 import { FloorPlanManager } from './src/components/rooms/FloorPlanManager';
 import { RoomList } from '@/src/components/rooms/RoomList';
 import { DataSpreadsheetPage } from '@/src/components/spreadsheet/DataSpreadsheetPage';
-import { WorkOrderList } from './src/components/workorders/WorkOrderList';
-import { WorkOrderUpload } from './src/components/workorders/WorkOrderUpload';
-import { WorkOrderDetail } from './src/components/workorders/WorkOrderDetail';
-import { WorkOrderInsights } from './src/components/workorders/WorkOrderInsights';
-import { PhotoComplete } from './src/components/workorders/PhotoComplete';
 import { StaffManager } from './src/components/settings/StaffManager';
 
 // Static login credentials from environment variables
@@ -466,8 +461,6 @@ const App = () => {
           <SidebarItem collapsed={sidebarCollapsed} icon={Database} label="Spreadsheet" active={location.pathname.startsWith('/spreadsheet')} onClick={() => navigate('/spreadsheet')} />
           <SidebarItem collapsed={sidebarCollapsed} icon={Download} label="Exports" active={location.pathname.startsWith('/exports')} onClick={() => navigate('/exports')} />
           <SidebarItem collapsed={sidebarCollapsed} icon={DoorClosed} label="Equipment Rooms" active={location.pathname.startsWith('/rooms')} onClick={() => navigate('/rooms')} />
-          <SidebarItem collapsed={sidebarCollapsed} icon={ClipboardList} label="Work Orders" active={location.pathname.startsWith('/work-orders') && !location.pathname.startsWith('/work-orders/insights')} onClick={() => navigate('/work-orders')} />
-          <SidebarItem collapsed={sidebarCollapsed} icon={DollarSign} label="Cost Insights" active={location.pathname.startsWith('/work-orders/insights')} onClick={() => navigate('/work-orders/insights')} />
         </nav>
 
         <div className={`border-t border-slate-800 shrink-0 ${sidebarCollapsed ? 'p-3' : 'p-6 space-y-3'}`}>
@@ -609,24 +602,6 @@ const App = () => {
                 <DoorClosed size={18} />
                 <span>Equipment Rooms</span>
               </button>
-              <button
-                onClick={() => { setIsMobileMenuOpen(false); navigate('/work-orders'); }}
-                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
-                  location.pathname.startsWith('/work-orders') && !location.pathname.startsWith('/work-orders/insights') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
-                }`}
-              >
-                <ClipboardList size={18} />
-                <span>Work Orders</span>
-              </button>
-              <button
-                onClick={() => { setIsMobileMenuOpen(false); navigate('/work-orders/insights'); }}
-                className={`text-left py-3.5 px-3 -mx-1 rounded-xl flex items-center gap-3 transition-colors ${
-                  location.pathname.startsWith('/work-orders/insights') ? 'bg-brand-700/70 shadow-soft' : 'hover:bg-brand-800'
-                }`}
-              >
-                <DollarSign size={18} />
-                <span>Cost Insights</span>
-              </button>
               {isAuthenticated ? (
                 <button onClick={handleLogout} className="mt-4 p-3 bg-brand-800 hover:bg-brand-700 rounded-lg flex items-center gap-3">
                   <LogOut size={18} />
@@ -664,7 +639,6 @@ const App = () => {
                 <Dashboard
                   data={data}
                   isAuthenticated={isAuthenticated}
-                  onViewWorkOrders={() => navigate("/work-orders")}
                   onViewEquipment={() => navigate("/equipment")}
                   onViewBuildings={() => navigate("/building")}
                 />
@@ -766,11 +740,6 @@ const App = () => {
                 canEdit={isAuthenticated}
               />
             } />
-            <Route path="/work-orders" element={<WorkOrderList canEdit={isAuthenticated} />} />
-            <Route path="/work-orders/insights" element={<WorkOrderInsights />} />
-            <Route path="/work-orders/upload" element={<WorkOrderUpload canEdit={isAuthenticated} data={data} />} />
-            <Route path="/work-orders/photo-complete" element={<PhotoComplete />} />
-            <Route path="/work-orders/:id" element={<WorkOrderDetail canEdit={isAuthenticated} />} />
             <Route path="/settings/staff" element={<StaffManager canEdit={isAuthenticated} />} />
           </Routes>
           <footer className="mt-auto pt-8 pb-4 text-center text-slate-500 text-sm">

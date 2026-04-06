@@ -157,11 +157,11 @@ function isoNow() {
 
 let equipmentReviewSchemaEnsured = false;
 let equipmentChangeLogSchemaEnsured = false;
-let workOrderSchemaEnsured = false;
 let transcriptLogSchemaEnsured = false;
+let staffSchemaEnsured = false;
 
-async function ensureWorkOrderSchema(db) {
-  if (workOrderSchemaEnsured) return;
+async function ensureStaffSchema(db) {
+  if (staffSchemaEnsured) return;
   try {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS Staff (
@@ -169,125 +169,16 @@ async function ensureWorkOrderSchema(db) {
         name TEXT NOT NULL,
         employeeNumber TEXT,
         craft TEXT,
+        category TEXT,
+        pin TEXT,
         active INTEGER DEFAULT 1,
         createdAt TEXT NOT NULL
       )
     `).run();
-
-    await db.prepare(`
-      CREATE TABLE IF NOT EXISTS WorkOrders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workOrderNumber TEXT NOT NULL,
-        buildingCode TEXT,
-        buildingName TEXT,
-        roomNumber TEXT,
-        equipmentId TEXT,
-        equipmentRaw TEXT,
-        requester TEXT,
-        requestDescription TEXT,
-        status TEXT,
-        priority TEXT,
-        craft TEXT,
-        openDate TEXT,
-        completeDate TEXT,
-        actualHours REAL DEFAULT 0,
-        actualLabourCost REAL DEFAULT 0,
-        actualTotalCost REAL DEFAULT 0,
-        technicianNotes TEXT,
-        completionRemark TEXT,
-        pdfUrl TEXT,
-        pageNumber INTEGER DEFAULT 1,
-        pageCount INTEGER DEFAULT 1,
-        source TEXT DEFAULT 'pdf',
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      )
-    `).run();
-
-    await db.prepare(`
-      CREATE TABLE IF NOT EXISTS WorkOrderTechnicians (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workOrderId INTEGER NOT NULL,
-        employeeNumber TEXT,
-        staffId INTEGER,
-        craft TEXT,
-        hours REAL,
-        rate REAL,
-        totalCost REAL
-      )
-    `).run();
-
-    await db.prepare(`
-      CREATE TABLE IF NOT EXISTS WorkOrderAnnotations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workOrderId INTEGER NOT NULL,
-        staffId INTEGER,
-        authorName TEXT NOT NULL,
-        text TEXT NOT NULL,
-        createdAt TEXT NOT NULL
-      )
-    `).run();
-
-    // Add pageCount column to existing databases that predate this field
-    try {
-      await db.prepare("ALTER TABLE WorkOrders ADD COLUMN pageCount INTEGER DEFAULT 1").run();
-    } catch (_) { /* column already exists — ignore */ }
-
-    // Mechanic completion fields
-    const completionCols = [
-      ["completedAt",          "TEXT"],
-      ["completionHours",      "REAL"],
-      ["completedByStaffIds",  "TEXT"],
-      ["completedByNames",     "TEXT"],
-      ["rawTranscript",        "TEXT"],
-      ["assignedToStaffId",    "INTEGER"],
-      ["assignedToName",       "TEXT"],
-      ["completionImageUrl",   "TEXT"],
-      ["handoffPending",       "INTEGER DEFAULT 0"],
-    ];
-    for (const [name, type] of completionCols) {
-      try {
-        await db.prepare(`ALTER TABLE WorkOrders ADD COLUMN ${name} ${type}`).run();
-      } catch (_) { /* already exists */ }
-    }
-
-    // Staff category (Operators / Maintenance / Assistants / Refrigeration)
-    try {
-      await db.prepare("ALTER TABLE Staff ADD COLUMN category TEXT").run();
-    } catch (_) { /* already exists */ }
-
-    // Staff PIN (5-digit, nullable — null means no PIN required)
-    try {
-      await db.prepare("ALTER TABLE Staff ADD COLUMN pin TEXT").run();
-    } catch (_) { /* already exists */ }
-
-    // Handoff tracking table
-    await db.prepare(`
-      CREATE TABLE IF NOT EXISTS WorkOrderHandoffs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workOrderId INTEGER NOT NULL,
-        fromStaffId INTEGER,
-        fromStaffName TEXT,
-        reason TEXT,
-        handoffNote TEXT,
-        resolved INTEGER DEFAULT 0,
-        resolvedByStaffId INTEGER,
-        resolvedToStaffId INTEGER,
-        resolvedToStaffName TEXT,
-        createdAt TEXT NOT NULL,
-        resolvedAt TEXT
-      )
-    `).run();
-
-    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_buildingCode ON WorkOrders(buildingCode)").run();
-    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_equipmentId ON WorkOrders(equipmentId)").run();
-    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_status ON WorkOrders(status)").run();
-    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wo_openDate ON WorkOrders(openDate)").run();
-    await db.prepare("CREATE INDEX IF NOT EXISTS idx_woa_workOrderId ON WorkOrderAnnotations(workOrderId)").run();
   } catch (e) {
-    console.warn("ensureWorkOrderSchema failed:", e?.message || String(e));
+    console.warn("ensureStaffSchema failed:", e?.message || String(e));
   } finally {
-    workOrderSchemaEnsured = true;
+    staffSchemaEnsured = true;
   }
 }
 
@@ -450,45 +341,6 @@ async function insertEquipmentChangeLogs(db, entries) {
   }
 }
 
-function mapWorkOrderRow(row) {
-  return {
-    id: String(row.id),
-    workOrderNumber: row.workOrderNumber || '',
-    buildingCode: row.buildingCode || null,
-    buildingName: row.buildingName || null,
-    roomNumber: row.roomNumber || null,
-    equipmentId: row.equipmentId || null,
-    equipmentRaw: row.equipmentRaw || null,
-    requester: row.requester || null,
-    requestDescription: row.requestDescription || null,
-    status: row.status || null,
-    priority: row.priority || null,
-    craft: row.craft || null,
-    openDate: row.openDate || null,
-    completeDate: row.completeDate || null,
-    actualHours: row.actualHours ?? 0,
-    actualLabourCost: row.actualLabourCost ?? 0,
-    actualTotalCost: row.actualTotalCost ?? 0,
-    technicianNotes: row.technicianNotes || null,
-    completionRemark: row.completionRemark || null,
-    pdfUrl: row.pdfUrl || null,
-    pageNumber: row.pageNumber ?? 1,
-    pageCount: row.pageCount ?? 1,
-    source: row.source || 'pdf',
-    completedAt: row.completedAt || null,
-    completionHours: row.completionHours ?? null,
-    completedByStaffIds: row.completedByStaffIds ? JSON.parse(row.completedByStaffIds) : null,
-    completedByNames: row.completedByNames || null,
-    rawTranscript: row.rawTranscript || null,
-    assignedToStaffId: row.assignedToStaffId ? String(row.assignedToStaffId) : null,
-    assignedToName: row.assignedToName || null,
-    completionImageUrl: row.completionImageUrl || null,
-    handoffPending: row.handoffPending === 1,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -529,7 +381,7 @@ export default {
       if (env.DB) {
         await ensureEquipmentReviewSchema(env.DB);
         await ensureEquipmentChangeLogSchema(env.DB);
-        await ensureWorkOrderSchema(env.DB);
+        await ensureStaffSchema(env.DB);
       }
 
       // --- GET AGGREGATED DATA ---
@@ -1559,125 +1411,12 @@ export default {
       }
 
       // =====================================================================
-      // HANDOFF ENDPOINTS
+      // WORK ORDER ENDPOINTS (removed)
       // =====================================================================
 
-      // --- LIST PENDING HANDOFFS (manager view) ---
-      if (url.pathname === '/api/work-orders/handoffs' && method === 'GET') {
-        if (!env.DB) throw new Error("DB binding not found on env");
-        await ensureWorkOrderSchema(env.DB);
-        const rows = await env.DB.prepare(`
-          SELECT h.*, w.workOrderNumber, w.requestDescription, w.buildingCode, w.roomNumber, w.assignedToName, w.assignedToStaffId
-          FROM WorkOrderHandoffs h
-          JOIN WorkOrders w ON w.id = h.workOrderId
-          WHERE h.resolved = 0
-          ORDER BY h.createdAt DESC
-        `).all();
-        return Response.json((rows.results || []).map(r => ({
-          id: String(r.id),
-          workOrderId: String(r.workOrderId),
-          workOrderNumber: r.workOrderNumber,
-          requestDescription: r.requestDescription,
-          buildingCode: r.buildingCode,
-          roomNumber: r.roomNumber,
-          currentAssigneeName: r.assignedToName,
-          currentAssigneeId: r.assignedToStaffId ? String(r.assignedToStaffId) : null,
-          fromStaffId: r.fromStaffId ? String(r.fromStaffId) : null,
-          fromStaffName: r.fromStaffName,
-          reason: r.reason,
-          handoffNote: r.handoffNote,
-          createdAt: r.createdAt,
-        })), { headers: corsHeaders });
-      }
-
-      // --- CREATE HANDOFF (pass on) ---
-      if (url.pathname.match(/^\/api\/work-orders\/\d+\/pass-on$/) && method === 'POST') {
-        const authError = validateWrite(request); if (authError) return authError;
-        if (!env.DB) throw new Error("DB binding not found on env");
-        await ensureWorkOrderSchema(env.DB);
-        const woId = url.pathname.split('/')[3];
-        const body = await request.json();
-        const now = isoNow();
-
-        // Create handoff record
-        await env.DB.prepare(`
-          INSERT INTO WorkOrderHandoffs (workOrderId, fromStaffId, fromStaffName, reason, handoffNote, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).bind(
-          woId,
-          body.fromStaffId || null,
-          body.fromStaffName || null,
-          body.reason || 'end_of_day',
-          body.handoffNote || null,
-          now
-        ).run();
-
-        // Mark WO as having a pending handoff
-        await env.DB.prepare(
-          "UPDATE WorkOrders SET handoffPending = 1, updatedAt = ? WHERE id = ?"
-        ).bind(now, woId).run();
-
-        // Post annotation if note provided
-        if (body.handoffNote) {
-          await env.DB.prepare(`
-            INSERT INTO WorkOrderAnnotations (workOrderId, text, authorName, createdAt)
-            VALUES (?, ?, ?, ?)
-          `).bind(woId, `[Handoff] ${body.handoffNote}`, body.fromStaffName || 'Staff', now).run();
-        }
-
-        const updated = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(woId).first();
-        return Response.json(mapWorkOrderRow(updated), { headers: corsHeaders });
-      }
-
-      // --- RESOLVE HANDOFF (manager reassigns) ---
-      if (url.pathname.match(/^\/api\/work-orders\/handoffs\/\d+\/resolve$/) && method === 'POST') {
-        const authError = validateWrite(request); if (authError) return authError;
-        if (!env.DB) throw new Error("DB binding not found on env");
-        await ensureWorkOrderSchema(env.DB);
-        const handoffId = url.pathname.split('/')[4];
-        const body = await request.json();
-        const now = isoNow();
-
-        const handoff = await env.DB.prepare("SELECT * FROM WorkOrderHandoffs WHERE id = ?").bind(handoffId).first();
-        if (!handoff) return Response.json({ error: 'Handoff not found' }, { status: 404, headers: corsHeaders });
-
-        // Mark handoff resolved
-        await env.DB.prepare(`
-          UPDATE WorkOrderHandoffs SET resolved = 1, resolvedAt = ?, resolvedToStaffId = ?, resolvedToStaffName = ?
-          WHERE id = ?
-        `).bind(now, body.toStaffId || null, body.toStaffName || null, handoffId).run();
-
-        // Reassign WO + clear pending flag
-        await env.DB.prepare(`
-          UPDATE WorkOrders SET assignedToStaffId = ?, assignedToName = ?, handoffPending = 0, updatedAt = ?
-          WHERE id = ?
-        `).bind(body.toStaffId || null, body.toStaffName || null, now, handoff.workOrderId).run();
-
-        const updated = await env.DB.prepare("SELECT * FROM WorkOrders WHERE id = ?").bind(handoff.workOrderId).first();
-        return Response.json(mapWorkOrderRow(updated), { headers: corsHeaders });
-      }
-
-      // =====================================================================
-      // WORK ORDER ENDPOINTS
-      // =====================================================================
-
-      // --- LIST WORK ORDERS (with search) ---
-      // --- WORK ORDER SUGGESTIONS (autocomplete) ---
-      if (url.pathname === '/api/work-orders/suggestions' && method === 'GET') {
-        if (!env.DB) throw new Error("DB binding not found on env");
-        await ensureWorkOrderSchema(env.DB);
-        const [woRows, descRows, eqRows, bldRows] = await Promise.all([
-          env.DB.prepare('SELECT DISTINCT workOrderNumber FROM WorkOrders WHERE workOrderNumber IS NOT NULL ORDER BY workOrderNumber LIMIT 500').all(),
-          env.DB.prepare('SELECT DISTINCT requestDescription FROM WorkOrders WHERE requestDescription IS NOT NULL LIMIT 300').all(),
-          env.DB.prepare('SELECT DISTINCT equipmentRaw FROM WorkOrders WHERE equipmentRaw IS NOT NULL ORDER BY equipmentRaw LIMIT 300').all(),
-          env.DB.prepare('SELECT DISTINCT buildingCode FROM WorkOrders WHERE buildingCode IS NOT NULL ORDER BY buildingCode').all(),
-        ]);
-        return Response.json({
-          woNumbers:    (woRows.results    || []).map(r => r.workOrderNumber),
-          descriptions: (descRows.results  || []).map(r => r.requestDescription),
-          equipment:    (eqRows.results    || []).map(r => r.equipmentRaw),
-          buildings:    (bldRows.results   || []).map(r => r.buildingCode),
-        }, { headers: corsHeaders });
+      // Work order endpoints removed.
+      if (url.pathname.startsWith('/api/work-orders')) {
+        return Response.json({ error: 'Not Found' }, { status: 404, headers: corsHeaders });
       }
 
       if (url.pathname === '/api/work-orders/insights' && method === 'GET') {
