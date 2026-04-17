@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import JSZip from 'jszip';
 import { useLocation, useNavigationType } from 'react-router-dom';
 import { Search, Download, Plus, Filter, X, ChevronDown, MapPin, Building, FileText, Camera, RefreshCw, Info, Upload, ChevronRight } from 'lucide-react';
 import { BuildingData, Equipment } from '../../../types';
@@ -110,6 +111,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   >('UNKNOWN');
   const [newEquipmentImages, setNewEquipmentImages] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [isExportingZip, setIsExportingZip] = useState(false);
   const [uploadingImageIds, setUploadingImageIds] = useState<Set<string>>(new Set());
   const [isDragOverNewEquipmentPhotos, setIsDragOverNewEquipmentPhotos] = useState(false);
   const [expandedEquipmentId, setExpandedEquipmentId] = useState<string | null>(null);
@@ -642,40 +644,32 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     setUploadingImageIds(new Set());
   };
 
-  const handleExport = () => {
+  const getImageFilename = (url: string) => url.split('/').pop() || '';
+
+  const buildCsvRows = (equipment: Equipment[]) => {
     const headers = [
-      "AccountingName", "PreviousAccountingName", "ScadaName", "Description", "Notes", "Location", "LocationDesc", "Room", 
-      "Key For Access", "CreationDate", "AssetTag", "SerialNum", "PurchaseDate", 
-      "FailureClass", "Hazardous", "Instructions", "ItemNum", "Manufacturer", 
-      "PurchaseDate", "PurchasePrice", "Vendor", "WarrantyDate"
+      "AccountingName", "PreviousAccountingName", "ScadaName", "Description", "Notes", "Location", "LocationDesc", "Room",
+      "Key For Access", "CreationDate", "AssetTag", "SerialNum", "PurchaseDate",
+      "FailureClass", "Hazardous", "Instructions", "ItemNum", "Manufacturer",
+      "PurchaseDate", "PurchasePrice", "Vendor", "WarrantyDate",
+      "Image1", "Image2", "Image3", "Image4", "Image5", "Image6", "Image7", "Image8"
     ];
-    const csvContent = allEquipment.map(e => {
+    const rows = equipment.map(e => {
+      const imgs = (e.images || []).slice(0, 8);
+      const imageCols = Array.from({ length: 8 }, (_, i) => imgs[i] ? getImageFilename(imgs[i]) : '');
       return [
-        e.accountingName,
-        e.previousAccountingName || '',
-        e.scadaName || '',
-        e.description,
-        e.notes,
-        e.Location,
-        e.LocationDesc,
-        e.room,
-        e.KeyAccess,
-        "",
-        e.AssetTag,
-        e.serialNum,
-        e.PurchaseDate,
-        "",
-        "",
-        "",
-        "",
-        e.manufacturer,
-        e.PurchaseDate,
-        "",
-        e.vendor,
-        e.WarrantyDate
+        e.accountingName, e.previousAccountingName || '', e.scadaName || '',
+        e.description, e.notes, e.Location, e.LocationDesc, e.room, e.KeyAccess,
+        "", e.AssetTag, e.serialNum, e.PurchaseDate, "", "", "", "",
+        e.manufacturer, e.PurchaseDate, "", e.vendor, e.WarrantyDate,
+        ...imageCols
       ].map(field => `"${(field || '').toString().replace(/"/g, '""')}"`).join(',');
     });
-    const csvString = [headers.join(','), ...csvContent].join('\n');
+    return [headers.join(','), ...rows].join('\n');
+  };
+
+  const handleExport = () => {
+    const csvString = buildCsvRows(allEquipment);
     const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -683,6 +677,33 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     a.download = `equipment_export_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportWithImages = async () => {
+    setIsExportingZip(true);
+    try {
+      const zip = new JSZip();
+      zip.file('equipment.csv', buildCsvRows(allEquipment));
+      const imagesFolder = zip.folder('images')!;
+      const allImageUrls: string[] = Array.from(new Set(allEquipment.flatMap((e: Equipment) => e.images || [])));
+      await Promise.all(allImageUrls.map(async (url) => {
+        try {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          imagesFolder.file(getImageFilename(url), blob);
+        } catch {
+          // skip images that fail to fetch
+        }
+      }));
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = `equipment_export_${new Date().toISOString().slice(0,10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      setIsExportingZip(false);
+    }
   };
 
   return (
@@ -705,7 +726,11 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
           </div>
           <div className="flex space-x-2">
             <button onClick={handleExport} className="bg-white border border-slate-200/80 text-slate-700 px-4 py-2 h-10 rounded-full text-sm font-medium flex items-center justify-center hover:bg-slate-50 hover:border-slate-300 whitespace-nowrap transition-all duration-200 ring-1 ring-slate-900/5">
-              <Download size={16} className="mr-2" /> Export
+              <Download size={16} className="mr-2" /> Export CSV
+            </button>
+            <button onClick={handleExportWithImages} disabled={isExportingZip} className="bg-white border border-slate-200/80 text-slate-700 px-4 py-2 h-10 rounded-full text-sm font-medium flex items-center justify-center hover:bg-slate-50 hover:border-slate-300 whitespace-nowrap transition-all duration-200 ring-1 ring-slate-900/5 disabled:opacity-50 disabled:pointer-events-none">
+              {isExportingZip ? <RefreshCw size={16} className="mr-2 animate-spin" /> : <Download size={16} className="mr-2" />}
+              {isExportingZip ? 'Building ZIP...' : 'Export ZIP'}
             </button>
             {canEdit && (
               <button onClick={handleCreate} className="bg-brand-600 text-white px-4 py-2 h-10 rounded-full text-sm font-medium flex items-center justify-center hover:bg-brand-700 whitespace-nowrap transition-colors shadow-soft">
