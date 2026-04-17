@@ -685,7 +685,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       const zip = new JSZip();
       zip.file('equipment.csv', buildCsvRows(allEquipment));
       const imagesFolder = zip.folder('images')!;
-      const allImageUrls: string[] = Array.from(new Set(allEquipment.flatMap((e: Equipment) => e.images || [])));
+      const allImageUrls: string[] = Array.from(new Set(allEquipment.slice(0, 80).flatMap((e: Equipment) => e.images || [])));
       await Promise.all(allImageUrls.map(async (url) => {
         try {
           const res = await fetch(url);
